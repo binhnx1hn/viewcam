@@ -5,7 +5,7 @@ a = Analysis(
     ['multiplecam.py'],
     pathex=[],
     binaries=[('libvlc.dll', '.'), ('libvlccore.dll', '.')],
-    datas=[('16.png', '.'), ('32.png', '.'), ('48.png', '.'), ('64.png', '.'), ('cameras.json', '.'), ('plugins', 'plugins')],
+    datas=[('logo.svg', '.'), ('cameras.json', '.'), ('plugins', 'plugins')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['logo.ico'],
 )

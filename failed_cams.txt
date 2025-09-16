@@ -166,3 +166,4 @@
 [2025-09-14 10:26:59] Cam Cổng 2 - Reconnect (state=State.Stopped)
 [2025-09-14 10:27:01] Cam Tiếp dân 1 - Reconnect (state=State.Stopped)
 [2025-09-14 10:27:01] Cam Tường rào - Reconnect (state=State.Stopped)
+2025-09-15 15:52:21 - rtsp://admin:UNV123456%@192.168.22.88:554/ch01 - VLC state: State.Ended

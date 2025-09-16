@@ -1,10 +1,15 @@
 [
-  { "url": "rtsp://admin:UNV123456%@192.168.22.100:554/ch01", "area": "Cổng", "name": "Cam Cổng 1" },
-  { "url": "rtsp://admin:UNV123456%@192.168.22.46:554/ch01", "area": "Phòng tiếp dân", "name": "Cam Tiếp dân 1" },
-  { "url": "rtsp://admin:UNV123456%@192.168.22.61:554/ch01", "area": "Tường rào", "name": "Cam Tường rào 1" },
-  { "url": "rtsp://admin:UNV123456%@192.168.22.88:554/ch01", "area": "Cổng", "name": "Cam Cổng 2" },
-  { "url": "rtsp://admin:123456a$@192.168.22.73:554/ch01", "area": "Phòng tiếp dân", "name": "Cam Tiếp dân 2" },
-  { "url": "rtsp://admin:UNV123456%@192.168.22.86:554/ch01", "area": "Tường rào", "name": "Cam Tường rào 2" },
-  { "url": "rtsp://admin:UNV123456%@192.168.22.26:554/ch01", "area": "Cổng", "name": "Cam Cổng 3" },
-  { "url": "rtsp://admin:UNV123456%@192.168.22.28:554/ch01", "area": "Phòng tiếp dân", "name": "Cam Tiếp dân 3" }
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC BUỒNG GIAM", "name": "A11"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.15:554/ch01", "area": "KHU VỰC BUỒNG GIAM", "name": "A12"},
+    {"url": "rtsp://admin:123456a$@192.168.22.73:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC", "name": "B11"},
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC", "name": "B12"},
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC", "name": "B13"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.61:554/ch01", "area": "KHU VỰC SOI CHIẾU THỦ CÔNG", "name": "C11"},
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC SOI CHIẾU THỦ CÔNG", "name": "C12"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.26:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D11"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.42:554/ch01", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI", "name": "E11"},
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI", "name": "E12"},
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI", "name": "E13"},
+    {"url": "rtmp://192.168.22.5:1935/live/stream_drone_1", "area": "KHU VỰC THĂM GẶP", "name": "F11"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.86:554/ch01", "area": "KHU VỰC THĂM GẶP", "name": "F12"},
 ]

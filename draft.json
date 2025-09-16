@@ -1,0 +1,35 @@
+CAM_LIST = [
+    {"url": "rtsp://admin:tungduong2018@NGHIATRANGLIETSYXOM4.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Cổng", "name": "Cam Cổng 1"},
+    {"url": "rtsp://admin:tungduong2018@CUOIXOM7.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Phòng tiếp dân", "name": "Cam Tiếp dân 1"},
+    {"url": "rtsp://admin:tungduong2018@CHOCHIEUBACHLIEN.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Tường rào", "name": "Cam Tường"},
+    {"url": "rtsp://admin:tungduong2018@NVHXOM2BACHLIEN.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Cổng", "name": "Cam Cổng 2"},
+    {"url": "rtsp://admin:tungduong2018@NHAVANHOAXOM7.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Phòng tiếp dân", "name": "Cam Tiếp dân 2"},
+    {"url": "rtsp://admin:tungduong2018@XOM7NGA3.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Tường rào", "name": "Cam Tường rào"},
+    {"url": "rtsp://admin:tungduong2018@XOM2HODIEUHOA.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Cổng", "name": "Cam Cổng 3"},
+    {"url": "rtsp://admin:tungduong2018@DINHXOM3.SMARTDDNS.TV:554/cam/realmonitor?channel=1&subtype=0", "area": "Phòng tiếp dân", "name": "Cam Tiếp dân 3"},
+    # Dummy camera để test max 16
+    {"url": "", "area": "Cổng", "name": "Cam 9"},
+    {"url": "", "area": "Cổng", "name": "Cam 10"},
+    {"url": "", "area": "Cổng", "name": "Cam 11"},
+    {"url": "", "area": "Cổng", "name": "Cam 12"},
+    {"url": "", "area": "Cổng", "name": "Cam 13"},
+    {"url": "", "area": "Cổng", "name": "Cam 14"},
+    {"url": "", "area": "Cổng", "name": "Cam 15"},
+    {"url": "", "area": "Cổng", "name": "Cam 16"},
+]
+
+[
+    {"url": "rtsp://192.168.22.5:38554/6385209cf41a711973ddb2bf_origin", "area": "KHU VỰC BUỒNG GIAM", "name": "A11"},
+    {"url": "rtsp://192.168.22.5:38554/6385209cf41a711973ddb2bf_origin", "area": "KHU VỰC BUỒNG GIAM", "name": "A12"},
+    {"url": "rtsp://192.168.22.5:38554/3f21870fc1e0a77d5e6abf9e_origin", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC", "name": "B11"},
+    {"url": "rtsp://192.168.22.5:38554/3f21870fc1e0a77d5e6abf9e_origin", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC", "name": "B12"},
+    {"url": "rtsp://192.168.22.5:38554/3f21870fc1e0a77d5e6abf9e_origin", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC", "name": "B13"},
+    {"url": "rtsp://192.168.22.5:38554/7966fe4435980970850a41e3_origin", "area": "KHU VỰC SOI CHIẾU THỦ CÔNG", "name": "C12"},
+    {"url": "rtsp://192.168.22.5:38554/7966fe4435980970850a41e3_origin", "area": "KHU VỰC SOI CHIẾU THỦ CÔNG", "name": "C13"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.88:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D11"},
+    {"url": "rtsp://192.168.22.5:38554/7d7da2895a68c864ec6ff55d_origin", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI", "name": "E11"},
+    {"url": "rtsp://192.168.22.5:38554/7d7da2895a68c864ec6ff55d_origin", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI", "name": "E12"},
+    {"url": "rtsp://192.168.22.5:38554/7d7da2895a68c864ec6ff55d_origin", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI", "name": "E13"},
+    {"url": "rtsp://192.168.22.5:38554/8ababce1f3b51c3b12d017f0_origin", "area": "KHU VỰC THĂM GẶP", "name": "F11"},
+    {"url": "rtsp://192.168.22.5:38554/8ababce1f3b51c3b12d017f0_origin", "area": "KHU VỰC THĂM GẶP", "name": "F12"}
+]
