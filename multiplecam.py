@@ -11,6 +11,7 @@ Dynamic camera layout per group by area
 - No pixel gaps using compute_boundaries
 - Ctrl+F toggles fullscreen
 - Displays connection status on overlay with orange text and transparent background
+- Displays current time at top center of window
 
 Requirements:
     pip install PyQt6 python-vlc
@@ -19,36 +20,40 @@ import sys
 import os
 import time
 from PyQt6 import QtWidgets, QtCore
-
+from datetime import datetime
 
 # Add DLL directory for libvlc
 base_path = os.path.dirname(os.path.abspath(__file__))
 os.add_dll_directory(base_path)
 import vlc
+
 # ---------- Cameras ----------
 CAM_LIST = [
-    {"url": "rtsp://admin:UNV123456%@192.168.22.18:554/ch01", "area": "KHU VỰC BUỒNG GIAM - 2 CAMERA", "name": "A11"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.15:554/ch01", "area": "KHU VỰC BUỒNG GIAM - 2 CAMERA", "name": "A12"},
-    {"url": "rtsp://admin:123456a$@192.168.22.73:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC - 6 CAMERA", "name": "B11"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.611:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC - 6 CAMERA", "name": "B12"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.611:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC - 6 CAMERA", "name": "B13"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.611:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC - 6 CAMERA", "name": "B14"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.611:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC - 6 CAMERA", "name": "B15"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.611:554/ch01", "area": "KHU VỰC HÀNG RÀO PHÍA BẮC - 6 CAMERA", "name": "B16"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.46:554/ch01", "area": "KHU VỰC KSAN - 2 CAMERA", "name": "C11"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.100:554/ch01", "area": "KHU VỰC KSAN - 2 CAMERA", "name": "C12"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.261:554/ch01", "area": "KHU VỰC CỔNG TRẠI - 3 CAMERA", "name": "D11"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.261:554/ch01", "area": "KHU VỰC CỔNG TRẠI - 3 CAMERA", "name": "D12"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.61:554/ch01", "area": "KHU VỰC CỔNG TRẠI - 3 CAMERA", "name": "D13"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.42:554/ch01", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI - 3 CAMERA", "name": "E11"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.27:554/ch01", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI - 3 CAMERA", "name": "E12"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.28:554/ch01", "area": "KHU VỰC ĐIỂM DANH LAO ĐỘNG RA VÀO DOANH TRẠI - 3 CAMERA", "name": "E13"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.24:554/ch01", "area": "KHU VỰC THĂM GẶP - 2 CAMERA", "name": "F11"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.86:554/ch01", "area": "KHU VỰC THĂM GẶP - 2 CAMERA", "name": "F12"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/f35b705e8c57ae59e369ebc9", "area": "KHU VỰC BUỒNG GIAM", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/43ba9900ff2fc7d9d3207254", "area": "KHU VỰC BUỒNG GIAM", "name": "A14", "camera_id": "43ba9900ff2fc7d9d3207254"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC HÀNG RÀO", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"}, 
+    {"url": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},    
+    {"url": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "area": "KHU VỰC KSAN", "name": "C21", "camera_id": "5a90dccf0259cc883dd91c7a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20", "area": "KHU VỰC KSAN", "name": "C22", "camera_id": "f1c9d16d7f35450ac3171d20"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "area": "KHU VỰC KSAN", "name": "C23", "camera_id": "83567cd28bc5c1e1749a19fa"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a", "area": "KHU VỰC CỔNG TRẠI", "name": "D13", "camera_id": "bc666a1cd3460379f3d05a2a"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.160:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D14", "camera_id": "b8f3d30bf1c346e37d3cba37"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.150:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.162:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.163:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.158:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F11", "camera_id": "643b0662422d1d0dffa3fca2"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.165:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F12", "camera_id": "e902674982fc99aa343cdd94"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.156:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F13", "camera_id": "95dfde4807d4d6a9eec49920"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.164:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F14", "camera_id": "2468649b6215c4cdd2aef509"},  
 ]
+VLC_OPTS = (
+    ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
+)
 
-# VLC options
-VLC_OPTS = ":no-video-title-show :no-sub-autodetect-file :no-osd :network-caching=300"
 
 # ---------- Helpers ----------
 def compute_boundaries(total_pixels: int, segments: int):
@@ -91,8 +96,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             cams = cams[:6]
             num_cams = 6
         self.setWindowTitle(f"Camera Group: {group_name} ({num_cams} cams)")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowFlags(QtCore.Qt.WindowType.Window)
-
         self.cams = cams
         self.vlc_instance = vlc_instance
         self.frames = []  # list of (frame, label, cam) or (frame, None, None) for black tile
@@ -101,38 +106,77 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
 
         central = QtWidgets.QWidget()
         central.setContentsMargins(0, 0, 0, 0)
-        central.setStyleSheet("background: black;")
+        central.setStyleSheet("background: transparent;")
         self.setCentralWidget(central)
+        
+        # Group label
+        self.group_label = QtWidgets.QLabel(central)
+        self.group_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.group_label.setStyleSheet("""
+            background: transparent;
+            color: #FFA500;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 6px;
+            text-shadow: 1px 1px 2px black;
+        """)
+        self.group_label.setText(f"{group_name}")
+        self.group_label.adjustSize()
+        self.group_label.raise_()
+
+        # Time label
+        self.time_label = QtWidgets.QLabel(central)
+        self.time_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.time_label.setStyleSheet("""
+            background: transparent;
+            color: #FFA500;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 6px;
+            text-shadow: 1px 1px 2px black;
+        """)
+        self.time_label.setText(datetime.now().strftime("%H:%M:%S %d/%m/%Y"))
+        self.time_label.adjustSize()
+        self.time_label.raise_()
+
+        # Timer to update time
+        self.time_timer = QtCore.QTimer(self)
+        self.time_timer.setInterval(1000)  # Update every second
+        self.time_timer.timeout.connect(self._update_time)
+        self.time_timer.start()
 
         # Create frames and overlay labels
         for cam in self.cams:
             f = QtWidgets.QFrame(central)
-            f.setStyleSheet("background: black; border: 0px;")
-            # lbl = QtWidgets.QLabel(f)
-            # lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            # lbl.setStyleSheet("background: transparent; color: #FFA500; padding: 4px; font-size: 14px;")
-            # lbl.setText(f"{cam.get('name','')} - {cam.get('area','')}")
-            # lbl.adjustSize()
-            # lbl.move(8, 8)
+            f.setStyleSheet("background: transparent; border: 0px;")
             lbl = QtWidgets.QLabel(central)
             lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            # lbl.setStyleSheet("background: transparent; color: #FFA500; padding: 4px; font-size: 14px;")
-            lbl.setStyleSheet("background-color: rgba(0, 0, 0, 100); color: #FFA500; padding: 2px 6px; font-size: 14px; border-radius: 4px;")
-            lbl.setText(f"{cam.get('name','')} - {cam.get('area','')}")
+            lbl.setStyleSheet("""
+                background: transparent;
+                color: #FFA500;
+                padding: 4px;
+                font-size: 14px;
+                text-shadow: 1px 1px 2px black;
+            """)
+            lbl.setText(f"{cam.get('name','')}")
             lbl.adjustSize()
             lbl.move(8, 8)
             lbl.raise_()
             self.frames.append((f, lbl, cam))
+            if self.group_label:
+                sw = self.width()
+                self.group_label.move(sw - self.group_label.width() - 20, 10)
+                self.group_label.raise_()
 
         # Add black tiles for 2 or 3 cams
         if num_cams == 2:
             for _ in range(2):  # Add 2 black tiles
                 f = QtWidgets.QFrame(central)
-                f.setStyleSheet("background: black; border: 0px;")
+                f.setStyleSheet("background: transparent; border: 0px;")
                 self.frames.append((f, None, None))
         elif num_cams == 3:
             f = QtWidgets.QFrame(central)  # Add 1 black tile
-            f.setStyleSheet("background: black; border: 0px;")
+            f.setStyleSheet("background: transparent; border: 0px;")
             self.frames.append((f, None, None))
 
         # Define tile map based on number of cameras
@@ -155,7 +199,6 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if num_cams == 1:
             return {0: (0, 0, 1, 1)}  # Full screen
         elif num_cams in (2, 3, 4):
-            # 2x2 grid: top-left, top-right, bottom-left, bottom-right
             return {
                 0: (0, 0, 1, 1),  # Top-left
                 1: (1, 0, 2, 1),  # Top-right
@@ -199,11 +242,21 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             frame.setGeometry(int(x), int(y), w, h)
 
             if lbl:
-                # lbl.move(frame.x() + 8, frame.y() + 8)
-                # lbl.raise_()
                 lbl.adjustSize()
                 lbl.move(frame.x() + 8, frame.y() + frame.height() - lbl.height() - 8)
                 lbl.raise_()
+
+        # Position group label
+        if self.group_label:
+            sw = self.width()
+            self.group_label.move(sw - self.group_label.width() - 20, 10)
+            self.group_label.raise_()
+
+        # Position time label at top center
+        if self.time_label:
+            self.time_label.adjustSize()
+            self.time_label.move((sw - self.time_label.width()) // 2, 10)
+            self.time_label.raise_()
 
         # Attach or reassign players
         if not self.players:
@@ -232,6 +285,14 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                         lbl.adjustSize()
                         lbl.raise_()
 
+    def _update_time(self):
+        """Update the time label with current time."""
+        self.time_label.setText(datetime.now().strftime("%H:%M:%S %d/%m/%Y"))
+        self.time_label.adjustSize()
+        sw = self.width()
+        self.time_label.move((sw - self.time_label.width()) // 2, 10)
+        self.time_label.raise_()
+
     def _monitor_players(self):
         """Check player status and update labels."""
         for idx, (frame, lbl, cam) in enumerate(self.frames):
@@ -243,14 +304,22 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 if now - self.last_play_attempts[idx] > self.RECONNECT_INTERVAL:
                     self._start_playback(idx)
                     if lbl:
-                        lbl.setText(f"{cam.get('name','')} - {cam.get('area','')} (Đang kết nối...)")
+                        lbl.setText(f"{cam.get('name','')} (Đang kết nối...)")
                         lbl.adjustSize()
                         lbl.raise_()
+                        if self.group_label:
+                            sw = self.width()
+                            self.group_label.move(sw - self.group_label.width() - 20, 10)
+                            self.group_label.raise_()
             else:
                 if lbl:
-                    lbl.setText(f"{cam.get('name','')} - {cam.get('area','')}")
+                    lbl.setText(f"{cam.get('name','')}")
                     lbl.adjustSize()
                     lbl.raise_()
+                    if self.group_label:
+                        sw = self.width()
+                        self.group_label.move(sw - self.group_label.width() - 20, 10)
+                        self.group_label.raise_()
 
     def _start_playback(self, idx):
         """Start or restart playback for a specific camera."""
@@ -262,6 +331,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             return
         now = time.time()
         if now - self.last_play_attempts[idx] < 1.0:
+        # if now - self.last_play_attempts[idx] < 0.3:
             return
         self.last_play_attempts[idx] = now
         try:

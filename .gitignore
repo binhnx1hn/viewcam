@@ -1,0 +1,54 @@
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.so
+*.egg-info/
+.eggs/
+*.log
+
+# Virtual environment
+venv/
+.env/
+.venv/
+
+# ===============================
+# IDE / Editor
+# ===============================
+# PyCharm / IntelliJ
+.idea/
+*.iml
+
+# VSCode
+.vscode/
+
+# ===============================
+# Build artifacts
+# ===============================
+build/
+dist/
+*.spec
+
+# PyInstaller build folders (local compiled cache)
+**/localpycs/
+
+# ===============================
+# OS generated
+# ===============================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===============================
+# Logs / Temp
+# ===============================
+*.tmp
+*.temp
+*.swp
+*.bak
+*.old
+*.cache
