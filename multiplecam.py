@@ -19,6 +19,7 @@ Requirements:
 import sys
 import os
 import time
+import json
 from PyQt6 import QtWidgets, QtCore
 from datetime import datetime
 
@@ -27,8 +28,14 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 os.add_dll_directory(base_path)
 import vlc
 
-# ---------- Cameras ----------
-CAM_LIST = [
+# ---------- Configuration ----------
+CAMERA_JSON_FILE = os.path.join(base_path, "camera.json")
+VLC_OPTS = (
+    ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
+)
+
+# ---------- Fallback camera list (used if JSON file is not found) ----------
+DEFAULT_CAM_LIST = [
     {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
     {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
     {"url": "rtsp://192.168.22.3:8564/bbox/f35b705e8c57ae59e369ebc9", "area": "KHU VỰC BUỒNG GIAM", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
@@ -50,12 +57,66 @@ CAM_LIST = [
     {"url": "rtsp://admin:UNV123456%@192.168.22.156:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F13", "camera_id": "95dfde4807d4d6a9eec49920"},
     {"url": "rtsp://admin:UNV123456%@192.168.22.164:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F14", "camera_id": "2468649b6215c4cdd2aef509"},  
 ]
-VLC_OPTS = (
-    ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
-)
 
 
 # ---------- Helpers ----------
+def load_cameras_from_json(json_file: str = None) -> list:
+    """
+    Load camera list from JSON file
+    
+    Args:
+        json_file: Path to JSON file. If None, uses default CAMERA_JSON_FILE
+    
+    Returns:
+        List of camera dictionaries. Returns DEFAULT_CAM_LIST if file not found or invalid.
+    """
+    if json_file is None:
+        json_file = CAMERA_JSON_FILE
+    
+    try:
+        if not os.path.exists(json_file):
+            print(f"[WARN] Camera JSON file not found: {json_file}")
+            print("[INFO] Using default camera list")
+            return DEFAULT_CAM_LIST.copy()
+        
+        with open(json_file, 'r', encoding='utf-8') as f:
+            cameras = json.load(f)
+        
+        # Validate structure
+        if not isinstance(cameras, list):
+            print(f"[ERROR] Invalid JSON structure: expected list, got {type(cameras)}")
+            print("[INFO] Using default camera list")
+            return DEFAULT_CAM_LIST.copy()
+        
+        # Validate each camera has required fields
+        valid_cameras = []
+        for idx, cam in enumerate(cameras):
+            if not isinstance(cam, dict):
+                print(f"[WARN] Skipping invalid camera at index {idx}: not a dictionary")
+                continue
+            if 'url' not in cam or 'area' not in cam:
+                print(f"[WARN] Skipping invalid camera at index {idx}: missing 'url' or 'area'")
+                continue
+            valid_cameras.append(cam)
+        
+        if not valid_cameras:
+            print("[ERROR] No valid cameras found in JSON file")
+            print("[INFO] Using default camera list")
+            return DEFAULT_CAM_LIST.copy()
+        
+        print(f"[INFO] Loaded {len(valid_cameras)} cameras from {json_file}")
+        return valid_cameras
+    
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Failed to parse JSON file: {e}")
+        print("[INFO] Using default camera list")
+        return DEFAULT_CAM_LIST.copy()
+    except Exception as e:
+        print(f"[ERROR] Failed to load camera JSON file: {e}")
+        print("[INFO] Using default camera list")
+        return DEFAULT_CAM_LIST.copy()
+
+
 def compute_boundaries(total_pixels: int, segments: int):
     """Return integer boundaries ensuring sum equals total_pixels."""
     return [int(round(i * total_pixels / segments)) for i in range(segments + 1)]
@@ -381,6 +442,13 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     vlc_args = ["--no-xlib"] if sys.platform.startswith("linux") else []
     vlc_instance = vlc.Instance(*vlc_args)
+
+    # Load cameras from JSON file
+    CAM_LIST = load_cameras_from_json()
+    
+    if not CAM_LIST:
+        print("[ERROR] No cameras available. Exiting.")
+        sys.exit(1)
 
     # Group cameras by area
     cam_groups = {}
