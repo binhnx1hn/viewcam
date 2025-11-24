@@ -21,9 +21,12 @@ import sys
 import os
 import time
 import json
-from PyQt6 import QtWidgets, QtCore, QtGui
+from PyQt6 import QtWidgets, QtCore, QtGui, QtNetwork
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QPixmap
 from datetime import datetime
 from collections import defaultdict
+from urllib.parse import urljoin
 
 # Add DLL directory for libvlc
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +49,7 @@ VLC_OPTS = (
     ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
 )
 PANEL_WIDTH = 350  # Width of the right-side panel for area counts
+IMAGE_BASE_URL = "http://192.168.22.2:10000/movis_data"  # Base URL for face images
 
 # ---------- Fallback camera list (used if JSON file is not found) ----------
 DEFAULT_CAM_LIST = [
@@ -141,24 +145,26 @@ class AreaCountTracker:
     
     def __init__(self):
         # Dictionary để lưu trữ counts theo department_id
-        # Format: {department_id: {'prisoner': int, 'officer': int, 'relative': int}}
+        # Format: {department_id: {'prisoner': int, 'officer': int, 'relative': int, 'list_person': list}}
         self.dept_counts = {}
         self.last_update_time = None
         
-    def update_counts(self, department_id, data_count):
+    def update_counts(self, department_id, data_count, list_person=None):
         """
         Cập nhật counts cho một department
         
         Args:
             department_id: ID của department
             data_count: Dictionary chứa counts {'prisoner': int, 'officer': int, 'relative': int}
+            list_person: List of person dictionaries with face recognition data
         """
         # Lưu counts theo department_id
         if data_count:
             self.dept_counts[department_id] = {
                 'prisoner': data_count.get('prisoner', 0),
                 'officer': data_count.get('officer', 0),
-                'relative': data_count.get('relative', 0)
+                'relative': data_count.get('relative', 0),
+                'list_person': list_person if list_person else []
             }
         
         self.last_update_time = time.strftime('%H:%M:%S')
@@ -168,12 +174,13 @@ class AreaCountTracker:
         Tổng hợp counts theo area từ tất cả departments
         
         Returns:
-            Dictionary {area: {'prisoner': int, 'officer': int, 'relative': int}}
+            Dictionary {area: {'prisoner': int, 'officer': int, 'relative': int, 'list_person': list}}
         """
         area_counts = defaultdict(lambda: {
             'prisoner': 0,
             'officer': 0,
-            'relative': 0
+            'relative': 0,
+            'list_person': []
         })
         
         # Duyệt qua tất cả departments và tổng hợp theo area
@@ -189,6 +196,14 @@ class AreaCountTracker:
             area_counts[area]['prisoner'] += counts['prisoner']
             area_counts[area]['officer'] += counts['officer']
             area_counts[area]['relative'] += counts['relative']
+            
+            # Tổng hợp list_person (chỉ lấy những người có subject_name, face_url, và score)
+            if 'list_person' in counts:
+                for person in counts['list_person']:
+                    if (person.get('subject_name') and 
+                        person.get('face_url') and 
+                        person.get('score', 0) > 0):
+                        area_counts[area]['list_person'].append(person)
         
         return area_counts
 
@@ -439,9 +454,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 if isinstance(payload, dict):
                     department_id = payload.get('department_id')
                     data_count = payload.get('data_count')
+                    list_person = payload.get('list_person', [])
                     
                     if department_id and data_count:
-                        self.area_tracker.update_counts(department_id, data_count)
+                        self.area_tracker.update_counts(department_id, data_count, list_person)
                         QtCore.QTimer.singleShot(0, self._update_area_panel)
                 
                 elif isinstance(payload, str):
@@ -450,9 +466,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                         if isinstance(parsed, dict):
                             department_id = parsed.get('department_id')
                             data_count = parsed.get('data_count')
+                            list_person = parsed.get('list_person', [])
                             
                             if department_id and data_count:
-                                self.area_tracker.update_counts(department_id, data_count)
+                                self.area_tracker.update_counts(department_id, data_count, list_person)
                                 QtCore.QTimer.singleShot(0, self._update_area_panel)
                     except json.JSONDecodeError:
                         pass
@@ -523,6 +540,34 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         counts = current_area_counts[self.group_name]
         area_widget = self._create_area_item(self.group_name, counts)
         self.area_layout.insertWidget(self.area_layout.count() - 1, area_widget)
+        
+        # Display recognized persons if available
+        list_person = counts.get('list_person', [])
+        if list_person:
+            # Add separator
+            separator = QtWidgets.QFrame()
+            separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+            separator.setStyleSheet("background-color: #ddd; max-height: 1px;")
+            self.area_layout.insertWidget(self.area_layout.count() - 1, separator)
+            
+            # Add recognized persons section
+            persons_label = QtWidgets.QLabel("NGƯỜI ĐƯỢC NHẬN DIỆN")
+            persons_label.setStyleSheet("""
+                QLabel {
+                    color: #FFA500;
+                    font-size: 14px;
+                    font-weight: bold;
+                    background: transparent;
+                    padding: 10px 5px 5px 5px;
+                }
+            """)
+            self.area_layout.insertWidget(self.area_layout.count() - 1, persons_label)
+            
+            # Display each person
+            for person in list_person[:10]:  # Limit to 10 persons
+                person_widget = self._create_person_item(person)
+                self.area_layout.insertWidget(self.area_layout.count() - 1, person_widget)
+        
         self._show_panel()
     
     def _hide_panel(self):
@@ -624,6 +669,135 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         total_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(total_label)
+        
+        return widget
+    
+    def _create_person_item(self, person):
+        """Create a widget for displaying a recognized person with face image, name, and score."""
+        widget = QtWidgets.QWidget()
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: rgba(240, 240, 240, 255);
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 5px;
+            }
+        """)
+        
+        layout = QtWidgets.QHBoxLayout(widget)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(10)
+        
+        # Face image
+        face_label = QtWidgets.QLabel()
+        face_label.setFixedSize(60, 60)
+        face_label.setStyleSheet("""
+            QLabel {
+                background-color: #ddd;
+                border: 2px solid #FFA500;
+                border-radius: 5px;
+            }
+        """)
+        face_label.setScaledContents(True)
+        face_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        
+        # Load image from URL
+        face_url = person.get('face_url', '')
+        if face_url:
+            # Construct full URL
+            if face_url.startswith('/'):
+                full_url = IMAGE_BASE_URL + face_url
+            else:
+                full_url = urljoin(IMAGE_BASE_URL + '/', face_url)
+            
+            # Load image asynchronously using QNetworkAccessManager
+            def load_image():
+                try:
+                    # Store reference to widget to prevent garbage collection
+                    widget_ref = widget
+                    label_ref = face_label
+                    
+                    network_manager = QtNetwork.QNetworkAccessManager()
+                    request = QtNetwork.QNetworkRequest(QUrl(full_url))
+                    reply = network_manager.get(request)
+                    
+                    def handle_reply():
+                        try:
+                            # Check if widget and label still exist
+                            if widget_ref and label_ref:
+                                if reply.error() == QtNetwork.QNetworkReply.NetworkError.NoError:
+                                    data = reply.readAll()
+                                    pixmap = QPixmap()
+                                    if pixmap.loadFromData(data) and not pixmap.isNull():
+                                        # Double check label still exists before setting pixmap
+                                        if label_ref:
+                                            label_ref.setPixmap(pixmap)
+                        except RuntimeError:
+                            # Widget was deleted, ignore
+                            pass
+                        except Exception as e:
+                            print(f"[WARN] Error setting pixmap: {e}")
+                        finally:
+                            reply.deleteLater()
+                            network_manager.deleteLater()
+                    
+                    reply.finished.connect(handle_reply)
+                except Exception as e:
+                    print(f"[WARN] Failed to load image from {full_url}: {e}")
+            
+            # Load image in background
+            QtCore.QTimer.singleShot(0, load_image)
+        else:
+            # Placeholder if no image
+            face_label.setText("📷")
+            face_label.setStyleSheet("""
+                QLabel {
+                    background-color: #ddd;
+                    border: 2px solid #FFA500;
+                    border-radius: 5px;
+                    font-size: 24px;
+                }
+            """)
+        
+        layout.addWidget(face_label)
+        
+        # Person info (name and score)
+        info_layout = QtWidgets.QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(5)
+        
+        # Name
+        name = person.get('subject_name', 'Unknown')
+        name_label = QtWidgets.QLabel(name)
+        name_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 13px;
+                font-weight: bold;
+                background: transparent;
+            }
+        """)
+        name_label.setWordWrap(True)
+        info_layout.addWidget(name_label)
+        
+        # Score
+        score = person.get('score', 0)
+        score_percent = int(score * 100) if score > 0 else 0
+        score_label = QtWidgets.QLabel(f"{score_percent}%")
+        score_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(100, 100, 100, 200);
+                color: white;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 3px 8px;
+                border-radius: 3px;
+            }
+        """)
+        score_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        info_layout.addWidget(score_label)
+        
+        layout.addLayout(info_layout, 1)
         
         return widget
     
