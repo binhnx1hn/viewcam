@@ -21,6 +21,7 @@ import sys
 import os
 import time
 import json
+import weakref
 from PyQt6 import QtWidgets, QtCore, QtGui, QtNetwork
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QPixmap
@@ -256,6 +257,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.area_tracker = AreaCountTracker() if SOCKET_AVAILABLE else None
         self.socket_client = None
         self.panel_visible = False  # Track if panel should be visible (only when data exists)
+        self.network_manager = QtNetwork.QNetworkAccessManager(self)
+        self.image_cache = {}
+        self.pending_image_labels = defaultdict(list)
+        self.pending_requests = set()
 
         central = QtWidgets.QWidget()
         central.setContentsMargins(0, 0, 0, 0)
@@ -425,19 +430,19 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         panel_layout.addWidget(title_label)
         panel_layout.addWidget(scroll)
         
-        # Status label
-        self.area_status_label = QtWidgets.QLabel("Đang kết nối...", self.area_panel)
-        self.area_status_label.setStyleSheet("""
-            QLabel {
-                background-color: rgba(0, 0, 0, 100);
-                color: #FFA500;
-                font-size: 12px;
-                padding: 5px;
-                border: none;
-            }
-        """)
-        self.area_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        panel_layout.addWidget(self.area_status_label)
+        # # Status label
+        # self.area_status_label = QtWidgets.QLabel("Đang kết nối...", self.area_panel)
+        # self.area_status_label.setStyleSheet("""
+        #     QLabel {
+        #         background-color: rgba(0, 0, 0, 100);
+        #         color: #FFA500;
+        #         font-size: 12px;
+        #         padding: 5px;
+        #         border: none;
+        #     }
+        # """)
+        # self.area_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # panel_layout.addWidget(self.area_status_label)
         
         # Initially hide the panel (will show when data is available)
         self.area_panel.hide()
@@ -479,16 +484,16 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         try:
             self.socket_client = use_socket_statical(message_handler)
             self.socket_client.connect()
-            self.area_status_label.setText("Đã kết nối")
-            self.area_status_label.setStyleSheet("""
-                QLabel {
-                    background-color: rgba(0, 150, 0, 150);
-                    color: white;
-                    font-size: 12px;
-                    padding: 5px;
-                    border: none;
-                }
-            """)
+            # self.area_status_label.setText("Đã kết nối")
+            # self.area_status_label.setStyleSheet("""
+            #     QLabel {
+            #         background-color: rgba(0, 150, 0, 150);
+            #         color: white;
+            #         font-size: 12px;
+            #         padding: 5px;
+            #         border: none;
+            #     }
+            # """)
         except Exception as e:
             print(f"[ERROR] Failed to initialize socket: {e}")
             self.area_status_label.setText("Lỗi kết nối")
@@ -617,10 +622,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         layout.addWidget(name_label)
         
         # Counts - larger font for better visibility
-        prisoner_label = QtWidgets.QLabel(f"👤 Phạm nhân: {counts['prisoner']:>5}")
+        prisoner_label = QtWidgets.QLabel(f"👤 Can phạm: {counts['prisoner']:>5}")
         prisoner_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: "#7a99ff";
                 font-size: 14px;
                 font-weight: 500;
                 background: transparent;
@@ -629,10 +634,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         layout.addWidget(prisoner_label)
         
-        officer_label = QtWidgets.QLabel(f"👮 Cán bộ:     {counts['officer']:>5}")
+        officer_label = QtWidgets.QLabel(f"👮 Cán bộ:     {counts['officer']:>6}")
         officer_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: #1dcb5f;
                 font-size: 14px;
                 font-weight: 500;
                 background: transparent;
@@ -641,10 +646,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         layout.addWidget(officer_label)
         
-        relative_label = QtWidgets.QLabel(f"👨‍👩‍👧 Thân nhân:  {counts['relative']:>5}")
+        relative_label = QtWidgets.QLabel(f"👨‍👩‍👧 Khách:  {counts['relative']:>11}")
         relative_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: "#ffbc92";
                 font-size: 14px;
                 font-weight: 500;
                 background: transparent;
@@ -701,7 +706,6 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         face_label.setScaledContents(True)
         face_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         
-        # Load image from URL
         face_url = person.get('face_url', '')
         if face_url:
             # Construct full URL
@@ -709,44 +713,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 full_url = IMAGE_BASE_URL + face_url
             else:
                 full_url = urljoin(IMAGE_BASE_URL + '/', face_url)
-            
-            # Load image asynchronously using QNetworkAccessManager
-            def load_image():
-                try:
-                    # Store reference to widget to prevent garbage collection
-                    widget_ref = widget
-                    label_ref = face_label
-                    
-                    network_manager = QtNetwork.QNetworkAccessManager()
-                    request = QtNetwork.QNetworkRequest(QUrl(full_url))
-                    reply = network_manager.get(request)
-                    
-                    def handle_reply():
-                        try:
-                            # Check if widget and label still exist
-                            if widget_ref and label_ref:
-                                if reply.error() == QtNetwork.QNetworkReply.NetworkError.NoError:
-                                    data = reply.readAll()
-                                    pixmap = QPixmap()
-                                    if pixmap.loadFromData(data) and not pixmap.isNull():
-                                        # Double check label still exists before setting pixmap
-                                        if label_ref:
-                                            label_ref.setPixmap(pixmap)
-                        except RuntimeError:
-                            # Widget was deleted, ignore
-                            pass
-                        except Exception as e:
-                            print(f"[WARN] Error setting pixmap: {e}")
-                        finally:
-                            reply.deleteLater()
-                            network_manager.deleteLater()
-                    
-                    reply.finished.connect(handle_reply)
-                except Exception as e:
-                    print(f"[WARN] Failed to load image from {full_url}: {e}")
-            
-            # Load image in background
-            QtCore.QTimer.singleShot(0, load_image)
+            self._load_face_image(full_url, face_label)
         else:
             # Placeholder if no image
             face_label.setText("📷")
@@ -800,6 +767,67 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         layout.addLayout(info_layout, 1)
         
         return widget
+
+    def _load_face_image(self, full_url: str, face_label: QtWidgets.QLabel):
+        """Load face image using shared network manager with caching to prevent flicker."""
+        if not full_url:
+            return
+        
+        # Use cached pixmap if available
+        cached = self.image_cache.get(full_url)
+        if cached and not cached.isNull():
+            face_label.setPixmap(cached)
+            return
+        
+        # Register label for pending update
+        label_ref = weakref.ref(face_label)
+        self.pending_image_labels[full_url].append(label_ref)
+        face_label.destroyed.connect(
+            lambda _=None, url=full_url, ref=label_ref: self._cleanup_pending_label(url, ref)
+        )
+        
+        # Avoid duplicate requests
+        if full_url in self.pending_requests:
+            return
+        
+        self.pending_requests.add(full_url)
+        request = QtNetwork.QNetworkRequest(QUrl(full_url))
+        reply = self.network_manager.get(request)
+        reply.finished.connect(lambda url=full_url, r=reply: self._handle_image_reply(url, r))
+
+    def _handle_image_reply(self, url: str, reply: QtNetwork.QNetworkReply):
+        """Handle network reply for image loading."""
+        try:
+            self.pending_requests.discard(url)
+            if reply.error() == QtNetwork.QNetworkReply.NetworkError.NoError:
+                data = reply.readAll()
+                pixmap = QPixmap()
+                if pixmap.loadFromData(data) and not pixmap.isNull():
+                    self.image_cache[url] = pixmap
+                    for label_ref in self.pending_image_labels.get(url, []):
+                        label = label_ref()
+                        if label:
+                            try:
+                                label.setPixmap(pixmap)
+                            except RuntimeError:
+                                pass
+            else:
+                print(f"[WARN] Failed to load image {url}: {reply.errorString()}")
+        finally:
+            reply.deleteLater()
+            self.pending_image_labels.pop(url, None)
+
+    def _cleanup_pending_label(self, url: str, label_ref: weakref.ReferenceType):
+        """Remove label reference from pending list when label is destroyed."""
+        refs = self.pending_image_labels.get(url)
+        if not refs:
+            return
+        try:
+            refs.remove(label_ref)
+        except ValueError:
+            pass
+        if not refs and url not in self.pending_requests:
+            self.pending_image_labels.pop(url, None)
     
     def _create_total_item(self, prisoner, officer, relative):
         """Create a widget for displaying total counts."""
@@ -829,30 +857,30 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         layout.addWidget(title_label)
         
         # Counts
-        prisoner_label = QtWidgets.QLabel(f"👤 Phạm nhân: {prisoner:>5}")
+        prisoner_label = QtWidgets.QLabel(f"👤 Can phạm: {prisoner:>5}")
         prisoner_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: "#7a99ff";
                 font-size: 12px;
                 background: transparent;
             }
         """)
         layout.addWidget(prisoner_label)
         
-        officer_label = QtWidgets.QLabel(f"👮 Cán bộ:     {officer:>5}")
+        officer_label = QtWidgets.QLabel(f"👮 Cán bộ:     {officer:>6}")
         officer_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: #1dcb5f;
                 font-size: 12px;
                 background: transparent;
             }
         """)
         layout.addWidget(officer_label)
         
-        relative_label = QtWidgets.QLabel(f"👨‍👩‍👧 Thân nhân:  {relative:>5}")
+        relative_label = QtWidgets.QLabel(f"👨‍👩‍👧 Khách:  {relative:>11}")
         relative_label.setStyleSheet("""
             QLabel {
-                color: #333;
+                color: "#ffbc92";
                 font-size: 12px;
                 background: transparent;
             }
