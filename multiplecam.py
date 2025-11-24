@@ -240,6 +240,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # Initialize area count tracker
         self.area_tracker = AreaCountTracker() if SOCKET_AVAILABLE else None
         self.socket_client = None
+        self.panel_visible = False  # Track if panel should be visible (only when data exists)
 
         central = QtWidgets.QWidget()
         central.setContentsMargins(0, 0, 0, 0)
@@ -345,9 +346,12 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                     }
                 """)
         
-        # Initial update to show panel (even if no data)
+        # Initial update to check if panel should be shown
         if self.area_tracker:
             QtCore.QTimer.singleShot(100, self._update_area_panel)
+        else:
+            # Hide panel initially if no tracker
+            self.panel_visible = False
 
         # Show fullscreen and layout
         QtCore.QTimer.singleShot(50, self.showFullScreen)
@@ -420,6 +424,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.area_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         panel_layout.addWidget(self.area_status_label)
         
+        # Initially hide the panel (will show when data is available)
+        self.area_panel.hide()
         self.area_panel.raise_()
     
     def _init_socket(self):
@@ -484,24 +490,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if not hasattr(self, 'area_layout'):
             return
         
+        # Hide panel if tracker is not available
         if not self.area_tracker:
-            # Show message when tracker is not available
-            while self.area_layout.count() > 1:
-                item = self.area_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-            
-            no_tracker_label = QtWidgets.QLabel("Tracker không khả dụng")
-            no_tracker_label.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-size: 14px;
-                    padding: 20px;
-                    background: transparent;
-                }
-            """)
-            no_tracker_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self.area_layout.insertWidget(0, no_tracker_label)
+            self._hide_panel()
             return
         
         # Clear existing area items
@@ -513,18 +504,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # Get all area counts
         all_area_counts = self.area_tracker.get_area_counts()
         
+        # Hide panel if no data at all
         if not all_area_counts:
-            no_data_label = QtWidgets.QLabel("Chưa có dữ liệu")
-            no_data_label.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-size: 14px;
-                    padding: 20px;
-                    background: transparent;
-                }
-            """)
-            no_data_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self.area_layout.insertWidget(0, no_data_label)
+            self._hide_panel()
             return
         
         # Filter to only show this window's area (group_name)
@@ -532,25 +514,32 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if self.group_name in all_area_counts:
             current_area_counts[self.group_name] = all_area_counts[self.group_name]
         
+        # Hide panel if no data for this area
         if not current_area_counts:
-            # Area not found in data yet
-            no_area_data_label = QtWidgets.QLabel(f"Chưa có dữ liệu cho\n{self.group_name}")
-            no_area_data_label.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-size: 14px;
-                    padding: 20px;
-                    background: transparent;
-                }
-            """)
-            no_area_data_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self.area_layout.insertWidget(0, no_area_data_label)
+            self._hide_panel()
             return
         
-        # Display only this area's counts
+        # Show panel and display this area's counts
         counts = current_area_counts[self.group_name]
         area_widget = self._create_area_item(self.group_name, counts)
         self.area_layout.insertWidget(self.area_layout.count() - 1, area_widget)
+        self._show_panel()
+    
+    def _hide_panel(self):
+        """Hide the area panel and adjust layout for full screen cameras."""
+        if hasattr(self, 'area_panel'):
+            self.area_panel.hide()
+            self.panel_visible = False
+            # Recalculate layout without panel
+            QtCore.QTimer.singleShot(10, self._layout_and_attach)
+    
+    def _show_panel(self):
+        """Show the area panel and adjust layout."""
+        if hasattr(self, 'area_panel'):
+            self.area_panel.show()
+            self.panel_visible = True
+            # Recalculate layout with panel
+            QtCore.QTimer.singleShot(10, self._layout_and_attach)
     
     def _create_area_item(self, area_name, counts):
         """Create a widget for displaying area counts - optimized for single area display."""
@@ -739,9 +728,13 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         geom = screen.geometry()
         sw, sh = geom.width(), geom.height()
         
-        # Reserve space for right panel
-        available_width = sw - PANEL_WIDTH
-        panel_x = available_width
+        # Calculate available width based on panel visibility
+        if hasattr(self, 'panel_visible') and self.panel_visible:
+            available_width = sw - PANEL_WIDTH
+            panel_x = available_width
+        else:
+            available_width = sw
+            panel_x = sw  # Panel is hidden, position it off-screen
 
         # Determine segments from tile_map
         max_x_seg = max(t[2] for t in self.tile_map.values())
@@ -749,10 +742,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         x_bounds = compute_boundaries(available_width, max_x_seg)
         y_bounds = compute_boundaries(sh, max_y_seg)
         
-        # Position area panel on the right
+        # Position area panel on the right (or off-screen if hidden)
         if hasattr(self, 'area_panel'):
             self.area_panel.setGeometry(panel_x, 0, PANEL_WIDTH, sh)
-            self.area_panel.raise_()
+            if hasattr(self, 'panel_visible') and self.panel_visible:
+                self.area_panel.raise_()
 
         # Set geometry for each frame
         for idx, (frame, lbl, cam) in enumerate(self.frames):
@@ -817,7 +811,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.time_label.adjustSize()
         screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
         sw = screen.geometry().width()
-        available_width = sw - PANEL_WIDTH
+        # Adjust available width based on panel visibility
+        if hasattr(self, 'panel_visible') and self.panel_visible:
+            available_width = sw - PANEL_WIDTH
+        else:
+            available_width = sw
         self.time_label.move((available_width - self.time_label.width()) // 2, 10)
         self.time_label.raise_()
 
@@ -825,7 +823,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Check player status and update labels."""
         screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
         sw = screen.geometry().width()
-        available_width = sw - PANEL_WIDTH
+        # Adjust available width based on panel visibility
+        if hasattr(self, 'panel_visible') and self.panel_visible:
+            available_width = sw - PANEL_WIDTH
+        else:
+            available_width = sw
         
         for idx, (frame, lbl, cam) in enumerate(self.frames):
             if cam is None:  # Black tile
