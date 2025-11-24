@@ -12,27 +12,40 @@ Dynamic camera layout per group by area
 - Ctrl+F toggles fullscreen
 - Displays connection status on overlay with orange text and transparent background
 - Displays current time at top center of window
+- Real-time area counts panel on the right side showing prisoner, officer, and relative counts by area
 
 Requirements:
-    pip install PyQt6 python-vlc
+    pip install PyQt6 python-vlc python-socketio
 """
 import sys
 import os
 import time
 import json
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtWidgets, QtCore, QtGui
 from datetime import datetime
+from collections import defaultdict
 
 # Add DLL directory for libvlc
 base_path = os.path.dirname(os.path.abspath(__file__))
 os.add_dll_directory(base_path)
 import vlc
 
+# Import socket and department mapping
+try:
+    from hooks.use_socket import use_socket_statical
+    from department_mapping import get_department_info
+    SOCKET_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARN] Socket modules not available: {e}")
+    print("[INFO] Real-time area counts will be disabled")
+    SOCKET_AVAILABLE = False
+
 # ---------- Configuration ----------
 CAMERA_JSON_FILE = os.path.join(base_path, "camera.json")
 VLC_OPTS = (
     ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
 )
+PANEL_WIDTH = 350  # Width of the right-side panel for area counts
 
 # ---------- Fallback camera list (used if JSON file is not found) ----------
 DEFAULT_CAM_LIST = [
@@ -121,6 +134,64 @@ def compute_boundaries(total_pixels: int, segments: int):
     """Return integer boundaries ensuring sum equals total_pixels."""
     return [int(round(i * total_pixels / segments)) for i in range(segments + 1)]
 
+
+# ---------- Area Count Tracker ----------
+class AreaCountTracker:
+    """Theo dõi và quản lý số lượng theo area"""
+    
+    def __init__(self):
+        # Dictionary để lưu trữ counts theo department_id
+        # Format: {department_id: {'prisoner': int, 'officer': int, 'relative': int}}
+        self.dept_counts = {}
+        self.last_update_time = None
+        
+    def update_counts(self, department_id, data_count):
+        """
+        Cập nhật counts cho một department
+        
+        Args:
+            department_id: ID của department
+            data_count: Dictionary chứa counts {'prisoner': int, 'officer': int, 'relative': int}
+        """
+        # Lưu counts theo department_id
+        if data_count:
+            self.dept_counts[department_id] = {
+                'prisoner': data_count.get('prisoner', 0),
+                'officer': data_count.get('officer', 0),
+                'relative': data_count.get('relative', 0)
+            }
+        
+        self.last_update_time = time.strftime('%H:%M:%S')
+    
+    def get_area_counts(self):
+        """
+        Tổng hợp counts theo area từ tất cả departments
+        
+        Returns:
+            Dictionary {area: {'prisoner': int, 'officer': int, 'relative': int}}
+        """
+        area_counts = defaultdict(lambda: {
+            'prisoner': 0,
+            'officer': 0,
+            'relative': 0
+        })
+        
+        # Duyệt qua tất cả departments và tổng hợp theo area
+        for department_id, counts in self.dept_counts.items():
+            dept_info = get_department_info(department_id) if SOCKET_AVAILABLE else {}
+            area = dept_info.get('area', '') if dept_info else ''
+            
+            # Nếu không có area, sử dụng department_id làm area
+            if not area:
+                area = f"UNKNOWN_AREA ({department_id[:8]}...)"
+            
+            # Cộng dồn counts vào area
+            area_counts[area]['prisoner'] += counts['prisoner']
+            area_counts[area]['officer'] += counts['officer']
+            area_counts[area]['relative'] += counts['relative']
+        
+        return area_counts
+
 def set_player_window_for_platform(player: vlc.MediaPlayer, frame: QtWidgets.QFrame):
     try:
         winid = int(frame.winId())
@@ -161,14 +232,22 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.setWindowFlags(QtCore.Qt.WindowType.Window)
         self.cams = cams
         self.vlc_instance = vlc_instance
+        self.group_name = group_name  # Store group name for filtering area counts
         self.frames = []  # list of (frame, label, cam) or (frame, None, None) for black tile
         self.players = []  # vlc players (index-aligned to frames)
         self.last_play_attempts = [0.0] * max(4, num_cams)  # Track last play attempt per cam
+
+        # Initialize area count tracker
+        self.area_tracker = AreaCountTracker() if SOCKET_AVAILABLE else None
+        self.socket_client = None
 
         central = QtWidgets.QWidget()
         central.setContentsMargins(0, 0, 0, 0)
         central.setStyleSheet("background: transparent;")
         self.setCentralWidget(central)
+        
+        # Create right panel for area counts
+        self._create_area_panel(central)
         
         # Group label
         self.group_label = QtWidgets.QLabel(central)
@@ -249,11 +328,389 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.monitor_timer.timeout.connect(self._monitor_players)
         self.monitor_timer.start()
 
+        # Initialize socket connection if available
+        if SOCKET_AVAILABLE and self.area_tracker:
+            self._init_socket()
+        else:
+            # Show status when socket is not available
+            if hasattr(self, 'area_status_label'):
+                self.area_status_label.setText("Socket không khả dụng")
+                self.area_status_label.setStyleSheet("""
+                    QLabel {
+                        background-color: rgba(150, 150, 150, 150);
+                        color: white;
+                        font-size: 12px;
+                        padding: 5px;
+                        border: none;
+                    }
+                """)
+        
+        # Initial update to show panel (even if no data)
+        if self.area_tracker:
+            QtCore.QTimer.singleShot(100, self._update_area_panel)
+
         # Show fullscreen and layout
         QtCore.QTimer.singleShot(50, self.showFullScreen)
         QtCore.QTimer.singleShot(80, self._layout_and_attach)
 
         self._fullscreen = True
+
+    def _create_area_panel(self, parent):
+        """Create the right-side panel for displaying area counts."""
+        self.area_panel = QtWidgets.QWidget(parent)
+        self.area_panel.setStyleSheet("""
+            QWidget {
+                background-color: rgba(255, 255, 255, 240);
+                border-left: 2px solid #FFA500;
+            }
+        """)
+        
+        # Create scroll area for area counts
+        scroll = QtWidgets.QScrollArea(self.area_panel)
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+        """)
+        
+        # Container widget for area items
+        self.area_container = QtWidgets.QWidget()
+        self.area_container.setStyleSheet("background: transparent;")
+        self.area_layout = QtWidgets.QVBoxLayout(self.area_container)
+        self.area_layout.setContentsMargins(10, 10, 10, 10)
+        self.area_layout.setSpacing(10)
+        self.area_layout.addStretch()
+        
+        scroll.setWidget(self.area_container)
+        
+        # Title label
+        title_label = QtWidgets.QLabel("NHẬN DIỆN", self.area_panel)
+        title_label.setStyleSheet("""
+            QLabel {
+                background-color: #FFA500;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+            }
+        """)
+        title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        
+        # Layout for panel
+        panel_layout = QtWidgets.QVBoxLayout(self.area_panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+        panel_layout.addWidget(title_label)
+        panel_layout.addWidget(scroll)
+        
+        # Status label
+        self.area_status_label = QtWidgets.QLabel("Đang kết nối...", self.area_panel)
+        self.area_status_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 100);
+                color: #FFA500;
+                font-size: 12px;
+                padding: 5px;
+                border: none;
+            }
+        """)
+        self.area_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        panel_layout.addWidget(self.area_status_label)
+        
+        self.area_panel.raise_()
+    
+    def _init_socket(self):
+        """Initialize socket connection for real-time updates."""
+        if not SOCKET_AVAILABLE or not self.area_tracker:
+            return
+        
+        def message_handler(payload):
+            """Handle incoming socket messages."""
+            try:
+                if isinstance(payload, dict):
+                    department_id = payload.get('department_id')
+                    data_count = payload.get('data_count')
+                    
+                    if department_id and data_count:
+                        self.area_tracker.update_counts(department_id, data_count)
+                        QtCore.QTimer.singleShot(0, self._update_area_panel)
+                
+                elif isinstance(payload, str):
+                    try:
+                        parsed = json.loads(payload)
+                        if isinstance(parsed, dict):
+                            department_id = parsed.get('department_id')
+                            data_count = parsed.get('data_count')
+                            
+                            if department_id and data_count:
+                                self.area_tracker.update_counts(department_id, data_count)
+                                QtCore.QTimer.singleShot(0, self._update_area_panel)
+                    except json.JSONDecodeError:
+                        pass
+            except Exception as e:
+                print(f"[ERROR] Socket message handler error: {e}")
+        
+        try:
+            self.socket_client = use_socket_statical(message_handler)
+            self.socket_client.connect()
+            self.area_status_label.setText("Đã kết nối")
+            self.area_status_label.setStyleSheet("""
+                QLabel {
+                    background-color: rgba(0, 150, 0, 150);
+                    color: white;
+                    font-size: 12px;
+                    padding: 5px;
+                    border: none;
+                }
+            """)
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize socket: {e}")
+            self.area_status_label.setText("Lỗi kết nối")
+            self.area_status_label.setStyleSheet("""
+                QLabel {
+                    background-color: rgba(150, 0, 0, 150);
+                    color: white;
+                    font-size: 12px;
+                    padding: 5px;
+                    border: none;
+                }
+            """)
+    
+    def _update_area_panel(self):
+        """Update the area panel with current counts for this window's area only."""
+        if not hasattr(self, 'area_layout'):
+            return
+        
+        if not self.area_tracker:
+            # Show message when tracker is not available
+            while self.area_layout.count() > 1:
+                item = self.area_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            
+            no_tracker_label = QtWidgets.QLabel("Tracker không khả dụng")
+            no_tracker_label.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-size: 14px;
+                    padding: 20px;
+                    background: transparent;
+                }
+            """)
+            no_tracker_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self.area_layout.insertWidget(0, no_tracker_label)
+            return
+        
+        # Clear existing area items
+        while self.area_layout.count() > 1:  # Keep the stretch
+            item = self.area_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Get all area counts
+        all_area_counts = self.area_tracker.get_area_counts()
+        
+        if not all_area_counts:
+            no_data_label = QtWidgets.QLabel("Chưa có dữ liệu")
+            no_data_label.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-size: 14px;
+                    padding: 20px;
+                    background: transparent;
+                }
+            """)
+            no_data_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self.area_layout.insertWidget(0, no_data_label)
+            return
+        
+        # Filter to only show this window's area (group_name)
+        current_area_counts = {}
+        if self.group_name in all_area_counts:
+            current_area_counts[self.group_name] = all_area_counts[self.group_name]
+        
+        if not current_area_counts:
+            # Area not found in data yet
+            no_area_data_label = QtWidgets.QLabel(f"Chưa có dữ liệu cho\n{self.group_name}")
+            no_area_data_label.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-size: 14px;
+                    padding: 20px;
+                    background: transparent;
+                }
+            """)
+            no_area_data_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self.area_layout.insertWidget(0, no_area_data_label)
+            return
+        
+        # Display only this area's counts
+        counts = current_area_counts[self.group_name]
+        area_widget = self._create_area_item(self.group_name, counts)
+        self.area_layout.insertWidget(self.area_layout.count() - 1, area_widget)
+    
+    def _create_area_item(self, area_name, counts):
+        """Create a widget for displaying area counts - optimized for single area display."""
+        widget = QtWidgets.QWidget()
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: rgba(255, 255, 255, 255);
+                border: 2px solid #FFA500;
+                border-radius: 8px;
+            }
+        """)
+        
+        layout = QtWidgets.QVBoxLayout(widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(8)
+        
+        # Area name - larger and more prominent
+        name_label = QtWidgets.QLabel(area_name)
+        name_label.setStyleSheet("""
+            QLabel {
+                color: #FFA500;
+                font-size: 16px;
+                font-weight: bold;
+                background: transparent;
+                padding-bottom: 8px;
+                border-bottom: 2px solid #FFA500;
+            }
+        """)
+        name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(name_label)
+        
+        # Counts - larger font for better visibility
+        prisoner_label = QtWidgets.QLabel(f"👤 Phạm nhân: {counts['prisoner']:>5}")
+        prisoner_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+                padding: 5px;
+            }
+        """)
+        layout.addWidget(prisoner_label)
+        
+        officer_label = QtWidgets.QLabel(f"👮 Cán bộ:     {counts['officer']:>5}")
+        officer_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+                padding: 5px;
+            }
+        """)
+        layout.addWidget(officer_label)
+        
+        relative_label = QtWidgets.QLabel(f"👨‍👩‍👧 Thân nhân:  {counts['relative']:>5}")
+        relative_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+                padding: 5px;
+            }
+        """)
+        layout.addWidget(relative_label)
+        
+        # Total - more prominent
+        total = counts['prisoner'] + counts['officer'] + counts['relative']
+        total_label = QtWidgets.QLabel(f"📊 TỔNG:       {total:>5}")
+        total_label.setStyleSheet("""
+            QLabel {
+                color: #FFA500;
+                font-size: 16px;
+                font-weight: bold;
+                background: rgba(255, 200, 100, 100);
+                border-top: 2px solid #FFA500;
+                padding: 10px 5px;
+                border-radius: 4px;
+            }
+        """)
+        total_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(total_label)
+        
+        return widget
+    
+    def _create_total_item(self, prisoner, officer, relative):
+        """Create a widget for displaying total counts."""
+        widget = QtWidgets.QWidget()
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: rgba(255, 200, 100, 255);
+                border: 2px solid #FFA500;
+                border-radius: 5px;
+            }
+        """)
+        
+        layout = QtWidgets.QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)
+        
+        # Title
+        title_label = QtWidgets.QLabel("TỔNG CỘNG TẤT CẢ KHU VỰC")
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 14px;
+                font-weight: bold;
+                background: transparent;
+            }
+        """)
+        layout.addWidget(title_label)
+        
+        # Counts
+        prisoner_label = QtWidgets.QLabel(f"👤 Phạm nhân: {prisoner:>5}")
+        prisoner_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 12px;
+                background: transparent;
+            }
+        """)
+        layout.addWidget(prisoner_label)
+        
+        officer_label = QtWidgets.QLabel(f"👮 Cán bộ:     {officer:>5}")
+        officer_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 12px;
+                background: transparent;
+            }
+        """)
+        layout.addWidget(officer_label)
+        
+        relative_label = QtWidgets.QLabel(f"👨‍👩‍👧 Thân nhân:  {relative:>5}")
+        relative_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 12px;
+                background: transparent;
+            }
+        """)
+        layout.addWidget(relative_label)
+        
+        total = prisoner + officer + relative
+        total_label = QtWidgets.QLabel(f"📊 Tổng:       {total:>5}")
+        total_label.setStyleSheet("""
+            QLabel {
+                color: #000;
+                font-size: 15px;
+                font-weight: bold;
+                background: transparent;
+                border-top: 2px solid #FFA500;
+                padding-top: 5px;
+            }
+        """)
+        layout.addWidget(total_label)
+        
+        return widget
 
     def _get_tile_map(self, num_cams: int):
         """Return tile boundaries: {cam_idx: (x_start, y_start, x_end, y_end)}."""
@@ -281,12 +738,21 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
         geom = screen.geometry()
         sw, sh = geom.width(), geom.height()
+        
+        # Reserve space for right panel
+        available_width = sw - PANEL_WIDTH
+        panel_x = available_width
 
         # Determine segments from tile_map
         max_x_seg = max(t[2] for t in self.tile_map.values())
         max_y_seg = max(t[3] for t in self.tile_map.values())
-        x_bounds = compute_boundaries(sw, max_x_seg)
+        x_bounds = compute_boundaries(available_width, max_x_seg)
         y_bounds = compute_boundaries(sh, max_y_seg)
+        
+        # Position area panel on the right
+        if hasattr(self, 'area_panel'):
+            self.area_panel.setGeometry(panel_x, 0, PANEL_WIDTH, sh)
+            self.area_panel.raise_()
 
         # Set geometry for each frame
         for idx, (frame, lbl, cam) in enumerate(self.frames):
@@ -307,16 +773,15 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 lbl.move(frame.x() + 8, frame.y() + frame.height() - lbl.height() - 8)
                 lbl.raise_()
 
-        # Position group label
+        # Position group label (adjust for panel)
         if self.group_label:
-            sw = self.width()
-            self.group_label.move(sw - self.group_label.width() - 20, 10)
+            self.group_label.move(available_width - self.group_label.width() - 20, 10)
             self.group_label.raise_()
 
-        # Position time label at top center
+        # Position time label at top center (adjust for panel)
         if self.time_label:
             self.time_label.adjustSize()
-            self.time_label.move((sw - self.time_label.width()) // 2, 10)
+            self.time_label.move((available_width - self.time_label.width()) // 2, 10)
             self.time_label.raise_()
 
         # Attach or reassign players
@@ -350,12 +815,18 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Update the time label with current time."""
         self.time_label.setText(datetime.now().strftime("%H:%M:%S %d/%m/%Y"))
         self.time_label.adjustSize()
-        sw = self.width()
-        self.time_label.move((sw - self.time_label.width()) // 2, 10)
+        screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
+        sw = screen.geometry().width()
+        available_width = sw - PANEL_WIDTH
+        self.time_label.move((available_width - self.time_label.width()) // 2, 10)
         self.time_label.raise_()
 
     def _monitor_players(self):
         """Check player status and update labels."""
+        screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
+        sw = screen.geometry().width()
+        available_width = sw - PANEL_WIDTH
+        
         for idx, (frame, lbl, cam) in enumerate(self.frames):
             if cam is None:  # Black tile
                 continue
@@ -369,8 +840,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                         lbl.adjustSize()
                         lbl.raise_()
                         if self.group_label:
-                            sw = self.width()
-                            self.group_label.move(sw - self.group_label.width() - 20, 10)
+                            self.group_label.move(available_width - self.group_label.width() - 20, 10)
                             self.group_label.raise_()
             else:
                 if lbl:
@@ -378,8 +848,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                     lbl.adjustSize()
                     lbl.raise_()
                     if self.group_label:
-                        sw = self.width()
-                        self.group_label.move(sw - self.group_label.width() - 20, 10)
+                        self.group_label.move(available_width - self.group_label.width() - 20, 10)
                         self.group_label.raise_()
 
     def _start_playback(self, idx):
@@ -429,6 +898,14 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        # Disconnect socket
+        if self.socket_client:
+            try:
+                self.socket_client.disconnect()
+            except Exception:
+                pass
+        
+        # Stop players
         for p in self.players:
             try:
                 if p:
