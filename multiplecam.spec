@@ -16,6 +16,7 @@ a = Analysis(
     datas=[
         ('camera.json', '.'),
         ('department_mapping.json', '.'),
+        ('movis_vms.subjects.csv', '.'),
         ('logo.ico', '.'),
         ('logo.svg', '.'),
         ('plugins', 'plugins'),

@@ -21,6 +21,7 @@ import sys
 import os
 import time
 import json
+import csv
 import weakref
 from PyQt6 import QtWidgets, QtCore, QtGui, QtNetwork
 from PyQt6.QtCore import QUrl
@@ -46,11 +47,13 @@ except ImportError as e:
 
 # ---------- Configuration ----------
 CAMERA_JSON_FILE = os.path.join(base_path, "camera.json")
+SUBJECTS_CSV_FILE = os.path.join(base_path, "movis_vms.subjects.csv")
 VLC_OPTS = (
     ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
 )
 PANEL_WIDTH = 350  # Width of the right-side panel for area counts
 IMAGE_BASE_URL = "http://192.168.22.2:10000/movis_data"  # Base URL for face images
+CSV_IMAGE_BASE_URL = "http://192.168.22.2:10000"  # Base URL for CSV images
 
 # ---------- Fallback camera list (used if JSON file is not found) ----------
 DEFAULT_CAM_LIST = [
@@ -133,6 +136,53 @@ def load_cameras_from_json(json_file: str = None) -> list:
         print(f"[ERROR] Failed to load camera JSON file: {e}")
         print("[INFO] Using default camera list")
         return DEFAULT_CAM_LIST.copy()
+
+
+def load_subject_images_from_csv(csv_file: str = None) -> dict:
+    """
+    Load subject images from CSV file.
+
+    Returns:
+        Dict mapping lowercase subject name to absolute image URL.
+    """
+    if csv_file is None:
+        csv_file = SUBJECTS_CSV_FILE
+
+    image_map = {}
+    if not os.path.exists(csv_file):
+        print(f"[WARN] Subjects CSV not found: {csv_file}")
+        return image_map
+
+    try:
+        with open(csv_file, "r", encoding="utf-8") as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                name = (row.get("name") or "").strip()
+                image_path = (row.get("image") or row.get("images[0]") or "").strip()
+                if not name or not image_path:
+                    continue
+                # Build absolute URL
+                if image_path.startswith("/"):
+                    full_url = f"{CSV_IMAGE_BASE_URL}{image_path}"
+                else:
+                    full_url = f"{CSV_IMAGE_BASE_URL}/{image_path}"
+                image_map[name.lower()] = full_url
+    except Exception as exc:
+        print(f"[WARN] Failed to load subjects CSV: {exc}")
+
+    print(f"[INFO] Loaded {len(image_map)} subject images from CSV")
+    return image_map
+
+
+SUBJECT_IMAGE_MAP = load_subject_images_from_csv()
+
+
+def get_subject_image_url(subject_name: str) -> str | None:
+    """Return CSV-derived image URL for a given subject name."""
+    if not subject_name:
+        return None
+    key = subject_name.strip().lower()
+    return SUBJECT_IMAGE_MAP.get(key)
 
 
 def compute_boundaries(total_pixels: int, segments: int):
@@ -683,7 +733,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         widget.setStyleSheet("""
             QWidget {
                 background-color: rgba(240, 240, 240, 255);
-                border: 1px solid #ddd;
+                border: 2px solid #FFA500;
                 border-radius: 5px;
                 padding: 5px;
             }
@@ -693,9 +743,14 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(10)
         
-        # Face image
+        # Face image + score column
+        face_column = QtWidgets.QVBoxLayout()
+        face_column.setContentsMargins(0, 0, 0, 0)
+        face_column.setSpacing(6)
+        face_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        
         face_label = QtWidgets.QLabel()
-        face_label.setFixedSize(60, 60)
+        face_label.setFixedSize(130, 130)
         face_label.setStyleSheet("""
             QLabel {
                 background-color: #ddd;
@@ -725,46 +780,73 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                     font-size: 24px;
                 }
             """)
+        face_column.addWidget(face_label)
         
-        layout.addWidget(face_label)
-        
-        # Person info (name and score)
-        info_layout = QtWidgets.QVBoxLayout()
-        info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(5)
-        
-        # Name
-        name = person.get('subject_name', 'Unknown')
-        name_label = QtWidgets.QLabel(name)
-        name_label.setStyleSheet("""
-            QLabel {
-                color: #333;
-                font-size: 13px;
-                font-weight: bold;
-                background: transparent;
-            }
-        """)
-        name_label.setWordWrap(True)
-        info_layout.addWidget(name_label)
-        
-        # Score
         score = person.get('score', 0)
         score_percent = int(score * 100) if score > 0 else 0
         score_label = QtWidgets.QLabel(f"{score_percent}%")
+        score_label.setFixedWidth(face_label.width())
         score_label.setStyleSheet("""
             QLabel {
                 background-color: rgba(100, 100, 100, 200);
                 color: white;
                 font-size: 12px;
                 font-weight: bold;
-                padding: 3px 8px;
+                padding: 4px 6px;
                 border-radius: 3px;
+                border: 2px solid #FFA500;
             }
         """)
         score_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        info_layout.addWidget(score_label)
+        face_column.addWidget(score_label)
+        layout.addLayout(face_column)
         
-        layout.addLayout(info_layout, 1)
+        # CSV image (subject profile) + name column
+        profile_column = QtWidgets.QVBoxLayout()
+        profile_column.setContentsMargins(0, 0, 0, 0)
+        profile_column.setSpacing(6)
+        profile_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        
+        profile_label = QtWidgets.QLabel()
+        profile_label.setFixedSize(face_label.size())
+        profile_label.setStyleSheet("""
+            QLabel {
+                background-color: #ddd;
+                border: 2px solid #FFA500;
+                border-radius: 5px;
+            }
+        """)
+        profile_label.setScaledContents(True)
+        profile_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        
+        csv_url = get_subject_image_url(person.get('subject_name'))
+        if csv_url:
+            self._load_face_image(csv_url, profile_label)
+        else:
+            profile_label.setText("🖼️")
+        profile_column.addWidget(profile_label)
+        
+        name = person.get('subject_name', 'Unknown')
+        name_label = QtWidgets.QLabel(name)
+        name_label.setFixedWidth(face_label.width())
+        name_label.setWordWrap(False)
+        name_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-size: 11px;
+                font-weight: bold;
+                background: transparent;
+            }
+        """)
+        name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        metrics = name_label.fontMetrics()
+        elided = metrics.elidedText(name, QtCore.Qt.TextElideMode.ElideRight, face_label.width() - 6)
+        name_label.setText(elided)
+        if elided != name:
+            name_label.setToolTip(name)
+        profile_column.addWidget(name_label)
+        
+        layout.addLayout(profile_column)
         
         return widget
 

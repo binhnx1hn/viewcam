@@ -33,6 +33,7 @@ Khi triển khai file `.exe` lên máy khác, cần đảm bảo:
 2. **Thư mục plugins/** - Chứa các plugin VLC (đã được đóng gói trong exe)
 3. **File camera.json** - File cấu hình camera (có thể tạo mới hoặc chỉnh sửa)
 4. **File department_mapping.json** - File mapping department (đã được đóng gói trong exe)
+5. **File movis_vms.subjects.csv** - Dữ liệu ảnh nhận diện (được copy cùng exe để bảng điều khiển hiển thị ảnh)
 
 **Lưu ý**: File `.exe` đã được đóng gói tất cả các file cần thiết, bạn chỉ cần copy file `.exe` là có thể chạy được trên máy khác (không cần cài Python).
 
@@ -40,6 +41,7 @@ Khi triển khai file `.exe` lên máy khác, cần đảm bảo:
 
 - File `camera.json`: Cấu hình danh sách camera
 - File `department_mapping.json`: Mapping department ID với area (đã được đóng gói trong exe)
+- File `movis_vms.subjects.csv`: Danh sách đối tượng & đường dẫn ảnh phục vụ panel thống kê
 
 ## Troubleshooting
 
