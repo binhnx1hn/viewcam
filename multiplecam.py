@@ -302,6 +302,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.frames = []  # list of (frame, label, cam) or (frame, None, None) for black tile
         self.players = []  # vlc players (index-aligned to frames)
         self.last_play_attempts = [0.0] * max(4, num_cams)  # Track last play attempt per cam
+        self._last_panel_snapshot = None  # cache last rendered panel state
 
         # Initialize area count tracker
         self.area_tracker = AreaCountTracker() if SOCKET_AVAILABLE else None
@@ -567,12 +568,6 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._hide_panel()
             return
         
-        # Clear existing area items
-        while self.area_layout.count() > 1:  # Keep the stretch
-            item = self.area_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
         # Get all area counts
         all_area_counts = self.area_tracker.get_area_counts()
         
@@ -591,38 +586,53 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._hide_panel()
             return
         
-        # Show panel and display this area's counts
         counts = current_area_counts[self.group_name]
-        area_widget = self._create_area_item(self.group_name, counts)
-        self.area_layout.insertWidget(self.area_layout.count() - 1, area_widget)
-        
-        # Display recognized persons if available
-        list_person = counts.get('list_person', [])
-        if list_person:
-            # Add separator
-            separator = QtWidgets.QFrame()
-            separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-            separator.setStyleSheet("background-color: #ddd; max-height: 1px;")
-            self.area_layout.insertWidget(self.area_layout.count() - 1, separator)
-            
-            # Add recognized persons section
-            persons_label = QtWidgets.QLabel("NGƯỜI ĐƯỢC NHẬN DIỆN")
-            persons_label.setStyleSheet("""
-                QLabel {
-                    color: #FFA500;
-                    font-size: 14px;
-                    font-weight: bold;
-                    background: transparent;
-                    padding: 10px 5px 5px 5px;
-                }
-            """)
-            self.area_layout.insertWidget(self.area_layout.count() - 1, persons_label)
-            
-            # Display each person
-            for person in list_person[:10]:  # Limit to 10 persons
-                person_widget = self._create_person_item(person)
-                self.area_layout.insertWidget(self.area_layout.count() - 1, person_widget)
-        
+        snapshot = self._build_panel_snapshot(counts)
+        if snapshot == self._last_panel_snapshot:
+            return
+
+        self.area_panel.setUpdatesEnabled(False)
+        try:
+            # Clear existing area items
+            while self.area_layout.count() > 1:  # Keep the stretch
+                item = self.area_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+
+            # Show panel and display this area's counts
+            area_widget = self._create_area_item(self.group_name, counts)
+            self.area_layout.insertWidget(self.area_layout.count() - 1, area_widget)
+
+            # Display recognized persons if available
+            list_person = counts.get('list_person', [])
+            if list_person:
+                # Add separator
+                separator = QtWidgets.QFrame()
+                separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+                separator.setStyleSheet("background-color: #ddd; max-height: 1px;")
+                self.area_layout.insertWidget(self.area_layout.count() - 1, separator)
+                
+                # Add recognized persons section
+                persons_label = QtWidgets.QLabel("NGƯỜI ĐƯỢC NHẬN DIỆN")
+                persons_label.setStyleSheet("""
+                    QLabel {
+                        color: #FFA500;
+                        font-size: 14px;
+                        font-weight: bold;
+                        background: transparent;
+                        padding: 10px 5px 5px 5px;
+                    }
+                """)
+                self.area_layout.insertWidget(self.area_layout.count() - 1, persons_label)
+                
+                # Display each person
+                for person in list_person[:10]:  # Limit to 10 persons
+                    person_widget = self._create_person_item(person)
+                    self.area_layout.insertWidget(self.area_layout.count() - 1, person_widget)
+        finally:
+            self.area_panel.setUpdatesEnabled(True)
+
+        self._last_panel_snapshot = snapshot
         self._show_panel()
     
     def _hide_panel(self):
@@ -630,6 +640,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if hasattr(self, 'area_panel'):
             self.area_panel.hide()
             self.panel_visible = False
+            self._last_panel_snapshot = None
             # Recalculate layout without panel
             QtCore.QTimer.singleShot(10, self._layout_and_attach)
     
@@ -849,6 +860,22 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         layout.addLayout(profile_column)
         
         return widget
+
+    def _build_panel_snapshot(self, counts):
+        """Return a lightweight representation of the panel to detect real changes."""
+        persons = []
+        for person in counts.get('list_person', [])[:10]:
+            persons.append((
+                person.get('subject_name') or '',
+                person.get('face_url') or '',
+                round(person.get('score', 0.0), 4)
+            ))
+        return (
+            counts.get('prisoner', 0),
+            counts.get('officer', 0),
+            counts.get('relative', 0),
+            tuple(persons)
+        )
 
     def _load_face_image(self, full_url: str, face_label: QtWidgets.QLabel):
         """Load face image using shared network manager with caching to prevent flicker."""
