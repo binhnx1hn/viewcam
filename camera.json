@@ -11,7 +11,7 @@
     {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
     {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
     {"url": "rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a", "area": "KHU VỰC CỔNG TRẠI", "name": "D13", "camera_id": "bc666a1cd3460379f3d05a2a"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.160:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D14", "camera_id": "b8f3d30bf1c346e37d3cba37"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/b8f3d30bf1c346e37d3cba37", "area": "KHU VỰC CỔNG TRẠI", "name": "D14", "camera_id": "b8f3d30bf1c346e37d3cba37"},
     {"url": "rtsp://admin:UNV123456%@192.168.22.150:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
     {"url": "rtsp://admin:UNV123456%@192.168.22.162:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
     {"url": "rtsp://admin:UNV123456%@192.168.22.163:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"},
