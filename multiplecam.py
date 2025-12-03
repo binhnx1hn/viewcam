@@ -52,15 +52,28 @@ VLC_OPTS = (
     ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
 )
 PANEL_WIDTH = 350  # Width of the right-side panel for area counts
+
+
+def normalize_area_name(area_name: str) -> str:
+    """Return normalized area name for comparisons."""
+    if not area_name:
+        return ""
+    return " ".join(area_name.split()).lower()
+
+
+ALLOWED_RECOGNITION_AREAS = {
+    normalize_area_name("KHU VỰC BUỒNG GIAM 01"),
+    normalize_area_name("KHU VỰC BUỒNG GIAM 02"),
+}
 IMAGE_BASE_URL = "http://192.168.22.2:10000/movis_data"  # Base URL for face images
 CSV_IMAGE_BASE_URL = "http://192.168.22.2:10000"  # Base URL for CSV images
 
 # ---------- Fallback camera list (used if JSON file is not found) ----------
 DEFAULT_CAM_LIST = [
-    {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/f35b705e8c57ae59e369ebc9", "area": "KHU VỰC BUỒNG GIAM", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/43ba9900ff2fc7d9d3207254", "area": "KHU VỰC BUỒNG GIAM", "name": "A14", "camera_id": "43ba9900ff2fc7d9d3207254"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/f35b705e8c57ae59e369ebc9", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/43ba9900ff2fc7d9d3207254", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A14", "camera_id": "43ba9900ff2fc7d9d3207254"},
     {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC HÀNG RÀO", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"}, 
     {"url": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},    
     {"url": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "area": "KHU VỰC KSAN", "name": "C21", "camera_id": "5a90dccf0259cc883dd91c7a"},
@@ -68,15 +81,9 @@ DEFAULT_CAM_LIST = [
     {"url": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "area": "KHU VỰC KSAN", "name": "C23", "camera_id": "83567cd28bc5c1e1749a19fa"},
     {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
     {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a", "area": "KHU VỰC CỔNG TRẠI", "name": "D13", "camera_id": "bc666a1cd3460379f3d05a2a"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.160:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D14", "camera_id": "b8f3d30bf1c346e37d3cba37"},
     {"url": "rtsp://admin:UNV123456%@192.168.22.150:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
     {"url": "rtsp://admin:UNV123456%@192.168.22.162:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.163:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.158:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F11", "camera_id": "643b0662422d1d0dffa3fca2"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.165:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F12", "camera_id": "e902674982fc99aa343cdd94"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.156:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F13", "camera_id": "95dfde4807d4d6a9eec49920"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.164:554/ch01", "area": "KHU VỰC KIỂM SOÁT RA VÀO", "name": "F14", "camera_id": "2468649b6215c4cdd2aef509"},  
+    {"url": "rtsp://admin:UNV123456%@192.168.22.163:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"}
 ]
 
 
@@ -327,7 +334,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.group_label.setStyleSheet("""
             background: transparent;
             color: #FFA500;
-            font-size: 16px;
+            font-size: 22px;
             font-weight: bold;
             padding: 6px;
             text-shadow: 1px 1px 2px black;
@@ -466,7 +473,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             QLabel {
                 background-color: #FFA500;
                 color: white;
-                font-size: 16px;
+                font-size: 22px;
                 font-weight: bold;
                 padding: 10px;
                 border: none;
@@ -562,6 +569,12 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Update the area panel with current counts for this window's area only."""
         if not hasattr(self, 'area_layout'):
             return
+
+        # Panel only applies to specific areas
+        normalized_group = normalize_area_name(self.group_name)
+        if normalized_group not in ALLOWED_RECOGNITION_AREAS:
+            self._hide_panel()
+            return
         
         # Hide panel if tracker is not available
         if not self.area_tracker:
@@ -577,16 +590,21 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             return
         
         # Filter to only show this window's area (group_name)
-        current_area_counts = {}
-        if self.group_name in all_area_counts:
-            current_area_counts[self.group_name] = all_area_counts[self.group_name]
+        counts = None
+        for area_name, area_counts in all_area_counts.items():
+            if normalize_area_name(area_name) == normalized_group:
+                counts = area_counts
+                break
+
+        # If no live data yet, still show panel with zeros
+        if not counts:
+            counts = {
+                "prisoner": 0,
+                "officer": 0,
+                "relative": 0,
+                "list_person": [],
+            }
         
-        # Hide panel if no data for this area
-        if not current_area_counts:
-            self._hide_panel()
-            return
-        
-        counts = current_area_counts[self.group_name]
         snapshot = self._build_panel_snapshot(counts)
         if snapshot == self._last_panel_snapshot:
             return
@@ -672,7 +690,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         name_label.setStyleSheet("""
             QLabel {
                 color: #FFA500;
-                font-size: 16px;
+                font-size: 22px;
                 font-weight: bold;
                 background: transparent;
                 padding-bottom: 8px;
@@ -687,7 +705,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         prisoner_label.setStyleSheet("""
             QLabel {
                 color: "#7a99ff";
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: 500;
                 background: transparent;
                 padding: 5px;
@@ -699,7 +717,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         officer_label.setStyleSheet("""
             QLabel {
                 color: #1dcb5f;
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: 500;
                 background: transparent;
                 padding: 5px;
@@ -711,7 +729,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         relative_label.setStyleSheet("""
             QLabel {
                 color: "#ffbc92";
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: 500;
                 background: transparent;
                 padding: 5px;
@@ -725,7 +743,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         total_label.setStyleSheet("""
             QLabel {
                 color: #FFA500;
-                font-size: 16px;
+                font-size: 22px;
                 font-weight: bold;
                 background: rgba(255, 200, 100, 100);
                 border-top: 2px solid #FFA500;
