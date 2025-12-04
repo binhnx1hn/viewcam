@@ -8,9 +8,9 @@
     {"url": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "area": "KHU VỰC KSAN", "name": "C21", "camera_id": "5a90dccf0259cc883dd91c7a"},
     {"url": "rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20", "area": "KHU VỰC KSAN", "name": "C22", "camera_id": "f1c9d16d7f35450ac3171d20"},
     {"url": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "area": "KHU VỰC KSAN", "name": "C23", "camera_id": "83567cd28bc5c1e1749a19fa"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.150:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.162:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
-    {"url": "rtsp://admin:UNV123456%@192.168.22.163:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"}
+    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"}
 ]
