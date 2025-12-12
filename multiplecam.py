@@ -46,7 +46,12 @@ except ImportError as e:
     SOCKET_AVAILABLE = False
 
 # ---------- Configuration ----------
-CAMERA_JSON_FILE = os.path.join(base_path, "camera.json")
+# Primary/alternate camera lists
+CAMERA_ORIGIN_JSON_FILE = os.path.join(base_path, "camera_origin.json")
+CAMERA_BBOX_JSON_FILE = os.path.join(base_path, "camera_bbox.json")
+# Backward compatibility: default remains origin file
+CAMERA_JSON_FILE = CAMERA_ORIGIN_JSON_FILE
+CAMERA_MODE_DEFAULT = "origin"  # or "bbox"
 SUBJECTS_CSV_FILE = os.path.join(base_path, "movis_vms.subjects.csv")
 VLC_OPTS = (
     ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
@@ -72,18 +77,12 @@ CSV_IMAGE_BASE_URL = "http://192.168.22.2:10000"  # Base URL for CSV images
 DEFAULT_CAM_LIST = [
     {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
     {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/f35b705e8c57ae59e369ebc9", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/43ba9900ff2fc7d9d3207254", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A14", "camera_id": "43ba9900ff2fc7d9d3207254"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC HÀNG RÀO", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"}, 
     {"url": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},    
-    {"url": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "area": "KHU VỰC KSAN", "name": "C21", "camera_id": "5a90dccf0259cc883dd91c7a"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20", "area": "KHU VỰC KSAN", "name": "C22", "camera_id": "f1c9d16d7f35450ac3171d20"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "area": "KHU VỰC KSAN", "name": "C23", "camera_id": "83567cd28bc5c1e1749a19fa"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"}
+    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "area": "KHU VỰC CĂN TIN", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/62a40e1d98804e00e4ce08d2", "area": "KHU VỰC THĂM GẶP", "name": "D14", "camera_id": "62a40e1d98804e00e4ce08d2"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC LAO ĐỘNG", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"}
 ]
 
 
@@ -197,6 +196,89 @@ def compute_boundaries(total_pixels: int, segments: int):
     return [int(round(i * total_pixels / segments)) for i in range(segments + 1)]
 
 
+# ---------- Camera list helper for dual-mode (origin/bbox) ----------
+def merge_camera_sources(origin_list: list, bbox_list: list) -> list:
+    """
+    Merge origin and bbox camera lists by camera_id (fallback to area+name).
+    Returns a list where each camera has url_origin/url_bbox and a default url.
+    """
+    cam_map = {}
+
+    def _key(cam, suffix: str):
+        cid = cam.get("camera_id")
+        if cid:
+            return cid
+        # Fallback key to keep cameras distinct even without camera_id
+        return f"{cam.get('area','unknown')}|{cam.get('name','unknown')}|{suffix}"
+
+    def _upsert(cam: dict, mode_key: str):
+        k = _key(cam, mode_key)
+        entry = cam_map.get(k, {
+            "camera_id": cam.get("camera_id"),
+            "area": cam.get("area", "Unknown"),
+            "name": cam.get("name", ""),
+            "url_origin": None,
+            "url_bbox": None,
+        })
+        # Preserve area/name if missing previously
+        if not entry.get("area") and cam.get("area"):
+            entry["area"] = cam.get("area")
+        if not entry.get("name") and cam.get("name"):
+            entry["name"] = cam.get("name")
+        entry[f"url_{mode_key}"] = cam.get("url")
+        cam_map[k] = entry
+
+    for cam in origin_list or []:
+        _upsert(cam, "origin")
+    for cam in bbox_list or []:
+        _upsert(cam, "bbox")
+
+    merged = list(cam_map.values())
+    # Ensure a usable url field exists
+    for cam in merged:
+        cam["url"] = cam.get(f"url_{CAMERA_MODE_DEFAULT}") or cam.get("url_origin") or cam.get("url_bbox")
+    return merged
+
+
+def load_dual_camera_list(mode: str = CAMERA_MODE_DEFAULT,
+                          origin_file: str | None = None,
+                          bbox_file: str | None = None) -> list:
+    """
+    Load cameras from origin and bbox files and merge them.
+    mode: "origin" or "bbox" defines initial url selection.
+    """
+    origin_list = load_cameras_from_json(origin_file or CAMERA_ORIGIN_JSON_FILE)
+    bbox_list = load_cameras_from_json(bbox_file or CAMERA_BBOX_JSON_FILE)
+    merged = merge_camera_sources(origin_list, bbox_list)
+    # Apply selected mode
+    for cam in merged:
+        preferred = cam.get(f"url_{mode}") if mode in ("origin", "bbox") else None
+        if preferred:
+            cam["url"] = preferred
+    return merged
+
+
+class ModeController(QtCore.QObject):
+    """Shared controller to toggle between origin and bbox mode."""
+    mode_changed = QtCore.pyqtSignal(str)
+
+    def __init__(self, initial_mode: str = CAMERA_MODE_DEFAULT):
+        super().__init__()
+        self.mode = initial_mode if initial_mode in ("origin", "bbox") else CAMERA_MODE_DEFAULT
+
+    def toggle_mode(self):
+        new_mode = "bbox" if self.mode == "origin" else "origin"
+        self.set_mode(new_mode)
+
+    def set_mode(self, mode: str):
+        if mode not in ("origin", "bbox"):
+            return
+        if mode == self.mode:
+            return
+        self.mode = mode
+        self.mode_changed.emit(self.mode)
+
+
 # ---------- Area Count Tracker ----------
 class AreaCountTracker:
     """Theo dõi và quản lý số lượng theo area"""
@@ -293,7 +375,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
 
     RECONNECT_INTERVAL = 5  # seconds
 
-    def __init__(self, cams, vlc_instance: vlc.Instance, group_name: str, parent=None):
+    def __init__(self, cams, vlc_instance: vlc.Instance, group_name: str, mode_controller: ModeController, parent=None):
         super().__init__(parent)
         num_cams = len(cams)
         if num_cams > 6:
@@ -306,6 +388,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.cams = cams
         self.vlc_instance = vlc_instance
         self.group_name = group_name  # Store group name for filtering area counts
+        self.mode_controller = mode_controller
+        self.current_mode = mode_controller.mode
         self.frames = []  # list of (frame, label, cam) or (frame, None, None) for black tile
         self.players = []  # vlc players (index-aligned to frames)
         self.last_play_attempts = [0.0] * max(4, num_cams)  # Track last play attempt per cam
@@ -327,6 +411,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         
         # Create right panel for area counts
         self._create_area_panel(central)
+
+        # Mode toggle button
+        self._create_mode_button(central)
         
         # Group label
         self.group_label = QtWidgets.QLabel(central)
@@ -387,13 +474,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 self.group_label.move(sw - self.group_label.width() - 20, 10)
                 self.group_label.raise_()
 
-        # Add black tiles for 2 or 3 cams
-        if num_cams == 2:
-            for _ in range(2):  # Add 2 black tiles
-                f = QtWidgets.QFrame(central)
-                f.setStyleSheet("background: transparent; border: 0px;")
-                self.frames.append((f, None, None))
-        elif num_cams == 3:
+        # Add black tile for 3 cams to keep grid balanced
+        if num_cams == 3:
             f = QtWidgets.QFrame(central)  # Add 1 black tile
             f.setStyleSheet("background: transparent; border: 0px;")
             self.frames.append((f, None, None))
@@ -505,6 +587,29 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # Initially hide the panel (will show when data is available)
         self.area_panel.hide()
         self.area_panel.raise_()
+    
+    def _create_mode_button(self, parent):
+        """Small toggle button to switch between origin/bbox streams."""
+        self.mode_button = QtWidgets.QPushButton(parent)
+        self.mode_button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.mode_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.mode_button.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(0, 0, 0, 120);
+                color: #FFA500;
+                border: 2px solid #FFA500;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 0, 0, 180);
+            }
+        """)
+        self.mode_button.clicked.connect(self.mode_controller.toggle_mode)
+        self.mode_controller.mode_changed.connect(self._on_mode_changed)
+        self._update_mode_button_text()
+        self.mode_button.raise_()
     
     def _init_socket(self):
         """Initialize socket connection for real-time updates."""
@@ -669,6 +774,31 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self.panel_visible = True
             # Recalculate layout with panel
             QtCore.QTimer.singleShot(10, self._layout_and_attach)
+
+    def _update_mode_button_text(self):
+        """Update toggle button label to reflect current mode."""
+        if hasattr(self, "mode_button") and self.mode_button:
+            self.mode_button.setText(f"MODE: {self.current_mode.upper()}")
+
+    def _on_mode_changed(self, mode: str):
+        """Handle global mode change and restart streams with new URLs."""
+        self.current_mode = mode
+        self._update_mode_button_text()
+
+        for idx, (_, lbl, cam) in enumerate(self.frames):
+            if cam is None:
+                continue
+            new_url = cam.get(f"url_{mode}") or cam.get("url")
+            if not new_url:
+                continue
+            if cam.get("url") != new_url:
+                cam["url"] = new_url
+                self.last_play_attempts[idx] = 0  # allow immediate restart
+            # Restart playback to switch stream
+            self._start_playback(idx)
+            if lbl:
+                lbl.adjustSize()
+                lbl.raise_()
     
     def _create_area_item(self, area_name, counts):
         """Create a widget for displaying area counts - optimized for single area display."""
@@ -1034,7 +1164,13 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Return tile boundaries: {cam_idx: (x_start, y_start, x_end, y_end)}."""
         if num_cams == 1:
             return {0: (0, 0, 1, 1)}  # Full screen
-        elif num_cams in (2, 3, 4):
+        elif num_cams == 2:
+            # Vertical split: cam0 top half, cam1 bottom half
+            return {
+                0: (0, 0, 1, 1),  # Top
+                1: (0, 1, 1, 2),  # Bottom
+            }
+        elif num_cams in (3, 4):
             return {
                 0: (0, 0, 1, 1),  # Top-left
                 1: (1, 0, 2, 1),  # Top-right
@@ -1106,6 +1242,12 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self.time_label.adjustSize()
             self.time_label.move((available_width - self.time_label.width()) // 2, 10)
             self.time_label.raise_()
+
+        # Position mode button at top-left
+        if hasattr(self, 'mode_button') and self.mode_button:
+            self.mode_button.adjustSize()
+            self.mode_button.move(10, 10)
+            self.mode_button.raise_()
 
         # Attach or reassign players
         if not self.players:
@@ -1186,6 +1328,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Start or restart playback for a specific camera."""
         if idx >= len(self.frames) or self.frames[idx][2] is None:
             return
+        if idx >= len(self.players):
+            return
         frame, lbl, cam = self.frames[idx]
         url = cam.get("url", "")
         if not url:
@@ -1251,8 +1395,11 @@ def main():
     vlc_args = ["--no-xlib"] if sys.platform.startswith("linux") else []
     vlc_instance = vlc.Instance(*vlc_args)
 
-    # Load cameras from JSON file
-    CAM_LIST = load_cameras_from_json()
+    # Shared mode controller and camera list
+    mode_controller = ModeController(CAMERA_MODE_DEFAULT)
+
+    # Load cameras from JSON files (origin + bbox)
+    CAM_LIST = load_dual_camera_list(mode_controller.mode)
     
     if not CAM_LIST:
         print("[ERROR] No cameras available. Exiting.")
@@ -1269,7 +1416,7 @@ def main():
     # Create a CustomLayoutWindow for each group
     windows = []
     for i, (group_name, cams) in enumerate(cam_groups.items()):
-        custom = CustomLayoutWindow(cams, vlc_instance, group_name)
+        custom = CustomLayoutWindow(cams, vlc_instance, group_name, mode_controller)
         custom.move(50 * i, 50 * i)  # Offset windows to avoid overlap
         custom.show()
         windows.append(custom)

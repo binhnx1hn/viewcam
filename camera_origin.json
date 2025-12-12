@@ -1,0 +1,10 @@
+[
+    {"url": "rtsp://service:Bosch123%@192.168.22.171:554/stream1", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
+    {"url": "rtsp://service:Bosch123%@192.168.22.172:554/stream1", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.157:554/ch01", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},    
+    {"url": "rtsp://admin:UNV123456%@192.168.22.149:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.155:554/ch01", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.150:554/ch01", "area": "KHU VỰC CĂN TIN", "name": "H11", "camera_id": "e6a6a63057a146f86c6d0f94"},
+    {"url": "rtsp://admin:Benta123%@192.168.22.161:554/profile2/media.smp", "area": "KHU VỰC THĂM GẶP", "name": "G11", "camera_id": "62a40e1d98804e00e4ce08d2"},
+    {"url": "rtsp://admin:UNV123456%@192.168.22.168:554/ch01", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "c064aa5670a62419ecc714e0"}
+]

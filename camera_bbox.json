@@ -1,0 +1,10 @@
+[
+    {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},    
+    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "area": "KHU VỰC CĂN TIN", "name": "H11", "camera_id": "e6a6a63057a146f86c6d0f94"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/62a40e1d98804e00e4ce08d2", "area": "KHU VỰC THĂM GẶP", "name": "G11", "camera_id": "62a40e1d98804e00e4ce08d2"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC LAO ĐỘNG", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"}
+]
