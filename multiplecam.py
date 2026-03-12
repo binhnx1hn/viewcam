@@ -23,6 +23,7 @@ import time
 import json
 import csv
 import weakref
+import threading
 from PyQt6 import QtWidgets, QtCore, QtGui, QtNetwork
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QPixmap
@@ -52,6 +53,9 @@ VLC_OPTS = (
     ":network-caching=0 :live-caching=0 :file-caching=0 :disc-caching=0 :drop-late-frames :skip-frames"
 )
 PANEL_WIDTH = 350  # Width of the right-side panel for area counts
+MAX_CAMS_PER_WINDOW = 16  # Maximum cameras per window
+VIEW_MODES = [1, 4, 9, 16]  # Available view modes: 1x1, 2x2, 3x3, 4x4
+DEFAULT_VIEW_MODE = 4  # Default view mode (2x2 grid)
 
 
 def normalize_area_name(area_name: str) -> str:
@@ -283,51 +287,54 @@ def set_player_window_for_platform(player: vlc.MediaPlayer, frame: QtWidgets.QFr
 # ---------- Custom layout window with dynamic tiling ----------
 class CustomLayoutWindow(QtWidgets.QMainWindow):
     """
-    Dynamic layout based on number of cameras:
-    - 1: Full screen
-    - 2: 2x2 grid (2 cams, 2 black tiles)
-    - 3: 2x2 grid (3 cams, 1 black tile)
-    - 4: 2x2 grid, each cam 1/4 screen
-    - 5-6: 3x3 grid (first 2x2 top-left, others 1x1)
+    Dynamic layout with switchable view modes:
+    - 1 cam (1x1): Full screen single camera
+    - 4 cams (2x2): 2x2 grid
+    - 9 cams (3x3): 3x3 grid
+    - 16 cams (4x4): 4x4 grid
+    Right-click context menu to switch view modes and navigate pages.
     """
 
     RECONNECT_INTERVAL = 5  # seconds
 
-    def __init__(self, cams, vlc_instance: vlc.Instance, group_name: str, parent=None):
+    def __init__(self, all_cams, vlc_instance: vlc.Instance, group_name: str, parent=None):
         super().__init__(parent)
-        num_cams = len(cams)
-        if num_cams > 6:
-            print(f"[WARN] Group '{group_name}' has {num_cams} cams, limiting to 6")
-            cams = cams[:6]
-            num_cams = 6
-        self.setWindowTitle(f"Camera Group: {group_name} ({num_cams} cams)")
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setWindowFlags(QtCore.Qt.WindowType.Window)
-        self.cams = cams
+        self.all_cams = all_cams  # Store ALL cameras for pagination
         self.vlc_instance = vlc_instance
-        self.group_name = group_name  # Store group name for filtering area counts
-        self.frames = []  # list of (frame, label, cam) or (frame, None, None) for black tile
-        self.players = []  # vlc players (index-aligned to frames)
-        self.last_play_attempts = [0.0] * max(4, num_cams)  # Track last play attempt per cam
-        self._last_panel_snapshot = None  # cache last rendered panel state
+        self.group_name = group_name
+        self.view_mode = DEFAULT_VIEW_MODE  # Current view mode (1, 4, 9, 16)
+        self.current_page = 0  # Current page index (0-based)
+        self._last_panel_snapshot = None
+        self._rebuilding = False
 
         # Initialize area count tracker
         self.area_tracker = AreaCountTracker() if SOCKET_AVAILABLE else None
         self.socket_client = None
-        self.panel_visible = False  # Track if panel should be visible (only when data exists)
+        self.panel_visible = False
+        self._panel_user_hidden = False
         self.network_manager = QtNetwork.QNetworkAccessManager(self)
         self.image_cache = {}
         self.pending_image_labels = defaultdict(list)
         self.pending_requests = set()
 
+        # These will be built by _rebuild_view
+        self.frames = []
+        self.players = []
+        self.last_play_attempts = []
+        self.tile_map = {}
+
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setWindowFlags(QtCore.Qt.WindowType.Window)
+        self._update_window_title()
+
         central = QtWidgets.QWidget()
         central.setContentsMargins(0, 0, 0, 0)
         central.setStyleSheet("background: transparent;")
         self.setCentralWidget(central)
-        
+
         # Create right panel for area counts
         self._create_area_panel(central)
-        
+
         # Group label
         self.group_label = QtWidgets.QLabel(central)
         self.group_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -358,48 +365,28 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.time_label.adjustSize()
         self.time_label.raise_()
 
+        # Page indicator label
+        self.page_label = QtWidgets.QLabel(central)
+        self.page_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.page_label.setStyleSheet("""
+            background: rgba(0, 0, 0, 120);
+            color: #FFA500;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 8px;
+        """)
+        self.page_label.hide()
+        self.page_label.raise_()
+
         # Timer to update time
         self.time_timer = QtCore.QTimer(self)
-        self.time_timer.setInterval(1000)  # Update every second
+        self.time_timer.setInterval(1000)
         self.time_timer.timeout.connect(self._update_time)
         self.time_timer.start()
 
-        # Create frames and overlay labels
-        for cam in self.cams:
-            f = QtWidgets.QFrame(central)
-            f.setStyleSheet("background: transparent; border: 0px;")
-            lbl = QtWidgets.QLabel(central)
-            lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            lbl.setStyleSheet("""
-                background: transparent;
-                color: #FFA500;
-                padding: 4px;
-                font-size: 14px;
-                text-shadow: 1px 1px 2px black;
-            """)
-            lbl.setText(f"{cam.get('name','')}")
-            lbl.adjustSize()
-            lbl.move(8, 8)
-            lbl.raise_()
-            self.frames.append((f, lbl, cam))
-            if self.group_label:
-                sw = self.width()
-                self.group_label.move(sw - self.group_label.width() - 20, 10)
-                self.group_label.raise_()
-
-        # Add black tiles for 2 or 3 cams
-        if num_cams == 2:
-            for _ in range(2):  # Add 2 black tiles
-                f = QtWidgets.QFrame(central)
-                f.setStyleSheet("background: transparent; border: 0px;")
-                self.frames.append((f, None, None))
-        elif num_cams == 3:
-            f = QtWidgets.QFrame(central)  # Add 1 black tile
-            f.setStyleSheet("background: transparent; border: 0px;")
-            self.frames.append((f, None, None))
-
-        # Define tile map based on number of cameras
-        self.tile_map = self._get_tile_map(num_cams)
+        # Build initial view (creates frames, players, tile_map)
+        self._rebuild_view()
 
         # Monitor connection status
         self.monitor_timer = QtCore.QTimer(self)
@@ -411,7 +398,6 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if SOCKET_AVAILABLE and self.area_tracker:
             self._init_socket()
         else:
-            # Show status when socket is not available
             if hasattr(self, 'area_status_label'):
                 self.area_status_label.setText("Socket không khả dụng")
                 self.area_status_label.setStyleSheet("""
@@ -423,12 +409,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                         border: none;
                     }
                 """)
-        
+
         # Initial update to check if panel should be shown
         if self.area_tracker:
             QtCore.QTimer.singleShot(100, self._update_area_panel)
         else:
-            # Hide panel initially if no tracker
             self.panel_visible = False
 
         # Show fullscreen and layout
@@ -436,6 +421,114 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         QtCore.QTimer.singleShot(80, self._layout_and_attach)
 
         self._fullscreen = True
+
+    def _update_window_title(self):
+        """Update window title with current view mode and page info."""
+        total = len(self.all_cams)
+        total_pages = max(1, (total + self.view_mode - 1) // self.view_mode)
+        grid = {1: '1x1', 4: '2x2', 9: '3x3', 16: '4x4'}.get(self.view_mode, f'{self.view_mode}')
+        self.setWindowTitle(
+            f"{self.group_name} — {grid} — Trang {self.current_page + 1}/{total_pages} ({total} cams)"
+        )
+
+    def _get_page_cams(self):
+        """Return list of cameras for the current page based on view_mode."""
+        start = self.current_page * self.view_mode
+        end = start + self.view_mode
+        return self.all_cams[start:end]
+
+    def _total_pages(self):
+        """Return total number of pages."""
+        return max(1, (len(self.all_cams) + self.view_mode - 1) // self.view_mode)
+
+    def _rebuild_view(self):
+        """Rebuild frames, players, and tile_map for current page and view_mode."""
+        central = self.centralWidget()
+
+        # Move old players to background thread for async stop (avoid UI freeze)
+        old_players = list(self.players)
+        self.players.clear()
+        if old_players:
+            def _stop_old_players():
+                for p in old_players:
+                    try:
+                        if p:
+                            p.stop()
+                    except Exception:
+                        pass
+            threading.Thread(target=_stop_old_players, daemon=True).start()
+
+        # Hide and schedule deletion of existing frames and labels
+        for (frame, lbl, cam) in self.frames:
+            frame.hide()
+            frame.setParent(None)
+            frame.deleteLater()
+            if lbl:
+                lbl.hide()
+                lbl.setParent(None)
+                lbl.deleteLater()
+        self.frames.clear()
+
+        # Get cameras for current page
+        page_cams = self._get_page_cams()
+        num_cams = len(page_cams)
+
+        # Create frames and overlay labels for page cameras
+        for cam in page_cams:
+            f = QtWidgets.QFrame(central)
+            f.setStyleSheet("background: transparent; border: 0px;")
+            f.show()
+            lbl = QtWidgets.QLabel(central)
+            lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            lbl.setStyleSheet("""
+                background: transparent;
+                color: #FFA500;
+                padding: 4px;
+                font-size: 14px;
+                text-shadow: 1px 1px 2px black;
+            """)
+            lbl.setText(f"{cam.get('name', '')}")
+            lbl.adjustSize()
+            lbl.show()
+            lbl.raise_()
+            self.frames.append((f, lbl, cam))
+
+        # Add black tiles to fill the grid
+        grid_slots = self.view_mode
+        for _ in range(grid_slots - num_cams):
+            f = QtWidgets.QFrame(central)
+            f.setStyleSheet("background: transparent; border: 0px;")
+            f.show()
+            self.frames.append((f, None, None))
+
+        # Build tile map
+        self.tile_map = self._get_tile_map(self.view_mode)
+
+        # Initialize play attempt tracking
+        self.last_play_attempts = [0.0] * grid_slots
+
+        # Update page indicator
+        self._update_page_label()
+        self._update_window_title()
+
+        # Ensure overlay labels stay on top
+        if hasattr(self, 'group_label'):
+            self.group_label.raise_()
+        if hasattr(self, 'time_label'):
+            self.time_label.raise_()
+        if hasattr(self, 'page_label'):
+            self.page_label.raise_()
+
+    def _update_page_label(self):
+        """Update the page indicator label."""
+        total_pages = self._total_pages()
+        if total_pages > 1:
+            self.page_label.setText(f"Trang {self.current_page + 1}/{total_pages}")
+            self.page_label.adjustSize()
+            self.page_label.show()
+            self.page_label.raise_()
+        else:
+            self.page_label.hide()
 
     def _create_area_panel(self, parent):
         """Create the right-side panel for displaying area counts."""
@@ -568,6 +661,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
     def _update_area_panel(self):
         """Update the area panel with current counts for this window's area only."""
         if not hasattr(self, 'area_layout'):
+            return
+
+        # Respect user's manual hide choice
+        if self._panel_user_hidden:
             return
 
         # Panel only applies to specific areas
@@ -1030,26 +1127,24 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         
         return widget
 
-    def _get_tile_map(self, num_cams: int):
-        """Return tile boundaries: {cam_idx: (x_start, y_start, x_end, y_end)}."""
-        if num_cams == 1:
-            return {0: (0, 0, 1, 1)}  # Full screen
-        elif num_cams in (2, 3, 4):
-            return {
-                0: (0, 0, 1, 1),  # Top-left
-                1: (1, 0, 2, 1),  # Top-right
-                2: (0, 1, 1, 2),  # Bottom-left
-                3: (1, 1, 2, 2),  # Bottom-right
-            }
-        else:  # 5-6: 3x3 grid
-            return {
-                0: (0, 0, 2, 2),  # A: 2x2 top-left
-                1: (2, 0, 3, 1),  # B: col 2, row 0
-                2: (2, 1, 3, 2),  # C: col 2, row 1
-                3: (2, 2, 3, 3),  # D: col 2, row 2
-                4: (0, 2, 1, 3),  # E: col 0, row 2
-                5: (1, 2, 2, 3),  # F: col 1, row 2
-            }
+    def _get_tile_map(self, view_mode: int):
+        """Return tile boundaries for a uniform NxN grid based on view_mode.
+
+        Args:
+            view_mode: Number of grid slots (1, 4, 9, or 16).
+
+        Returns:
+            Dict mapping slot index to (x_start, y_start, x_end, y_end).
+        """
+        import math
+        n = int(math.sqrt(view_mode))  # 1->1, 4->2, 9->3, 16->4
+        tile_map = {}
+        idx = 0
+        for row in range(n):
+            for col in range(n):
+                tile_map[idx] = (col, row, col + 1, row + 1)
+                idx += 1
+        return tile_map
 
     def _layout_and_attach(self):
         """Set frame geometry based on tile map and attach players."""
@@ -1107,6 +1202,12 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self.time_label.move((available_width - self.time_label.width()) // 2, 10)
             self.time_label.raise_()
 
+        # Position page label at bottom center
+        if hasattr(self, 'page_label') and self.page_label.isVisible():
+            self.page_label.adjustSize()
+            self.page_label.move((available_width - self.page_label.width()) // 2, sh - self.page_label.height() - 15)
+            self.page_label.raise_()
+
         # Attach or reassign players
         if not self.players:
             for idx, (frame, lbl, cam) in enumerate(self.frames):
@@ -1150,6 +1251,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
 
     def _monitor_players(self):
         """Check player status and update labels."""
+        if self._rebuilding:
+            return  # Skip monitoring during view rebuild
         screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
         sw = screen.geometry().width()
         # Adjust available width based on panel visibility
@@ -1192,7 +1295,6 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             return
         now = time.time()
         if now - self.last_play_attempts[idx] < 1.0:
-        # if now - self.last_play_attempts[idx] < 0.3:
             return
         self.last_play_attempts[idx] = now
         try:
@@ -1225,8 +1327,138 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             else:
                 self.showFullScreen()
                 self._fullscreen = True
+        elif event.key() in (QtCore.Qt.Key.Key_Right, QtCore.Qt.Key.Key_PageDown):
+            self._next_page()
+        elif event.key() in (QtCore.Qt.Key.Key_Left, QtCore.Qt.Key.Key_PageUp):
+            self._prev_page()
+        elif event.key() == QtCore.Qt.Key.Key_1:
+            self._change_view_mode(1)
+        elif event.key() == QtCore.Qt.Key.Key_2:
+            self._change_view_mode(4)
+        elif event.key() == QtCore.Qt.Key.Key_3:
+            self._change_view_mode(9)
+        elif event.key() == QtCore.Qt.Key.Key_4:
+            self._change_view_mode(16)
         else:
             super().keyPressEvent(event)
+
+    def contextMenuEvent(self, event):
+        """Show context menu on right-click with view mode selection and navigation."""
+        menu_style = """
+            QMenu {
+                background-color: rgba(40, 40, 40, 230);
+                color: white;
+                border: 1px solid #FFA500;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 14px;
+            }
+            QMenu::item {
+                padding: 8px 24px;
+                border-radius: 3px;
+            }
+            QMenu::item:selected {
+                background-color: #FFA500;
+                color: black;
+            }
+            QMenu::item:disabled {
+                color: #666;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #555;
+                margin: 4px 8px;
+            }
+        """
+        menu = QtWidgets.QMenu(self)
+        menu.setStyleSheet(menu_style)
+
+        # ---------- View mode submenu ----------
+        view_menu = menu.addMenu("🖥️ Chế độ xem")
+        view_menu.setStyleSheet(menu_style)
+        mode_labels = {1: "1 cam (1×1)", 4: "4 cam (2×2)", 9: "9 cam (3×3)", 16: "16 cam (4×4)"}
+        for mode in VIEW_MODES:
+            label = mode_labels.get(mode, f"{mode} cam")
+            if mode == self.view_mode:
+                label = f"✔ {label}"
+            action = view_menu.addAction(label)
+            action.triggered.connect(lambda checked, m=mode: self._change_view_mode(m))
+
+        # ---------- Page navigation ----------
+        total_pages = self._total_pages()
+        if total_pages > 1:
+            menu.addSeparator()
+            prev_action = menu.addAction(f"⬅️ Trang trước ({self.current_page}/{total_pages})")
+            prev_action.setEnabled(self.current_page > 0)
+            prev_action.triggered.connect(self._prev_page)
+
+            next_action = menu.addAction(f"➡️ Trang sau ({self.current_page + 2}/{total_pages})")
+            next_action.setEnabled(self.current_page < total_pages - 1)
+            next_action.triggered.connect(self._next_page)
+
+        # ---------- Toggle panel ----------
+        normalized_group = normalize_area_name(self.group_name)
+        if normalized_group in ALLOWED_RECOGNITION_AREAS:
+            menu.addSeparator()
+            if self._panel_user_hidden:
+                panel_action = menu.addAction("📊 Hiện bảng nhận diện")
+            else:
+                panel_action = menu.addAction("📊 Ẩn bảng nhận diện")
+            panel_action.triggered.connect(self._toggle_panel)
+
+        # ---------- Fullscreen toggle ----------
+        menu.addSeparator()
+        if self._fullscreen:
+            fs_action = menu.addAction("🔲 Thoát toàn màn hình (Ctrl+F)")
+        else:
+            fs_action = menu.addAction("🔳 Toàn màn hình (Ctrl+F)")
+        fs_action.triggered.connect(lambda: self.showNormal() if self._fullscreen else self.showFullScreen())
+        fs_action.triggered.connect(lambda: setattr(self, '_fullscreen', not self._fullscreen))
+
+        menu.exec(event.globalPos())
+
+    def _change_view_mode(self, new_mode: int):
+        """Switch to a different view mode (1, 4, 9, 16) and rebuild the view."""
+        if new_mode == self.view_mode:
+            return
+        self._rebuilding = True
+        self.view_mode = new_mode
+        # Clamp current page to valid range
+        total_pages = self._total_pages()
+        if self.current_page >= total_pages:
+            self.current_page = total_pages - 1
+        self._rebuild_view()
+        QtCore.QTimer.singleShot(200, self._finish_rebuild)
+
+    def _next_page(self):
+        """Navigate to the next page of cameras."""
+        if self.current_page < self._total_pages() - 1:
+            self._rebuilding = True
+            self.current_page += 1
+            self._rebuild_view()
+            QtCore.QTimer.singleShot(200, self._finish_rebuild)
+
+    def _prev_page(self):
+        """Navigate to the previous page of cameras."""
+        if self.current_page > 0:
+            self._rebuilding = True
+            self.current_page -= 1
+            self._rebuild_view()
+            QtCore.QTimer.singleShot(200, self._finish_rebuild)
+
+    def _finish_rebuild(self):
+        """Called after rebuild delay to attach players and resume monitoring."""
+        self._rebuilding = False
+        self._layout_and_attach()
+
+    def _toggle_panel(self):
+        """Toggle the recognition panel visibility based on user action."""
+        if self._panel_user_hidden:
+            self._panel_user_hidden = False
+            self._update_area_panel()
+        else:
+            self._panel_user_hidden = True
+            self._hide_panel()
 
     def closeEvent(self, event):
         # Disconnect socket
@@ -1253,26 +1485,28 @@ def main():
 
     # Load cameras from JSON file
     CAM_LIST = load_cameras_from_json()
-    
+
     if not CAM_LIST:
         print("[ERROR] No cameras available. Exiting.")
         sys.exit(1)
 
-    # Group cameras by area
-    cam_groups = {}
-    for cam in CAM_LIST:
-        area = cam.get("area", "Unknown")
-        if area not in cam_groups:
-            cam_groups[area] = []
-        cam_groups[area].append(cam)
+    total_cams = len(CAM_LIST)
+    cams_per_window = DEFAULT_VIEW_MODE  # 4 cameras per window
+    num_windows = max(1, (total_cams + cams_per_window - 1) // cams_per_window)
+    print(f"[INFO] {total_cams} cameras -> {num_windows} windows ({cams_per_window} cams/window)")
 
-    # Create a CustomLayoutWindow for each group
+    # Create multiple windows, each with a chunk of cameras
     windows = []
-    for i, (group_name, cams) in enumerate(cam_groups.items()):
-        custom = CustomLayoutWindow(cams, vlc_instance, group_name)
-        custom.move(50 * i, 50 * i)  # Offset windows to avoid overlap
-        custom.show()
-        windows.append(custom)
+    for i in range(num_windows):
+        start = i * cams_per_window
+        end = min(start + cams_per_window, total_cams)
+        chunk = CAM_LIST[start:end]
+        cam_names = [c.get("name", "") for c in chunk]
+        group_name = f"Window {i + 1} ({', '.join(cam_names)})"
+        win = CustomLayoutWindow(chunk, vlc_instance, group_name)
+        win.move(50 * i, 50 * i)
+        win.show()
+        windows.append(win)
 
     sys.exit(app.exec())
 
