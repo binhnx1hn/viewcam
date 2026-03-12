@@ -56,6 +56,7 @@ PANEL_WIDTH = 350  # Width of the right-side panel for area counts
 MAX_CAMS_PER_WINDOW = 16  # Maximum cameras per window
 VIEW_MODES = [1, 4, 9, 16]  # Available view modes: 1x1, 2x2, 3x3, 4x4
 DEFAULT_VIEW_MODE = 4  # Default view mode (2x2 grid)
+AUTO_ROTATE_INTERVAL = 30000  # Auto-rotate interval in ms (30 seconds) for single-cam view
 
 
 def normalize_area_name(area_name: str) -> str:
@@ -390,6 +391,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.time_timer.setInterval(1000)
         self.time_timer.timeout.connect(self._update_time)
         self.time_timer.start()
+
+        # Auto-rotate timer: cycles through pages in single-cam (1×1) view
+        self._auto_rotate_timer = QtCore.QTimer(self)
+        self._auto_rotate_timer.setInterval(AUTO_ROTATE_INTERVAL)
+        self._auto_rotate_timer.timeout.connect(self._auto_rotate_tick)
 
         # Create persistent pool of frames and players (created once, reused)
         self._init_persistent_pool(central)
@@ -1481,6 +1487,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self._rebuild_view()
         # Short delay for Qt geometry update, then re-attach players (no restart needed)
         QtCore.QTimer.singleShot(50, self._finish_rebuild)
+        # Start or stop auto-rotate based on new view mode
+        self._update_auto_rotate()
 
     def _next_page(self):
         """Navigate to the next page of cameras."""
@@ -1502,6 +1510,33 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Called after rebuild delay to attach players and resume monitoring."""
         self._rebuilding = False
         self._layout_and_attach()
+
+    def _auto_rotate_tick(self):
+        """Auto-rotate to the next page in single-cam (1×1) view mode.
+
+        Cycles back to page 0 after the last page.
+        """
+        if self.view_mode != 1:
+            # Safety: stop timer if view mode changed unexpectedly
+            self._auto_rotate_timer.stop()
+            return
+        total_pages = self._total_pages()
+        if total_pages <= 1:
+            return  # Nothing to rotate
+        # Cycle to next page (wrap around)
+        self._rebuilding = True
+        self.current_page = (self.current_page + 1) % total_pages
+        self._rebuild_view()
+        QtCore.QTimer.singleShot(50, self._finish_rebuild)
+
+    def _update_auto_rotate(self):
+        """Start auto-rotate timer when in 1×1 view with multiple pages, stop otherwise."""
+        if self.view_mode == 1 and self._total_pages() > 1:
+            if not self._auto_rotate_timer.isActive():
+                self._auto_rotate_timer.start()
+        else:
+            if self._auto_rotate_timer.isActive():
+                self._auto_rotate_timer.stop()
 
     def _toggle_panel(self):
         """Toggle the recognition panel visibility based on user action."""
