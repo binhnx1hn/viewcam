@@ -341,7 +341,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # Create right panel for area counts
         self._create_area_panel(central)
 
-        # Group label
+        # Group label (hidden — no longer displayed at top-right)
         self.group_label = QtWidgets.QLabel(central)
         self.group_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.group_label.setStyleSheet("""
@@ -354,7 +354,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         self.group_label.setText(f"{group_name}")
         self.group_label.adjustSize()
-        self.group_label.raise_()
+        self.group_label.hide()
 
         # Time label
         self.time_label = QtWidgets.QLabel(central)
@@ -480,6 +480,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             # Create and start player immediately
             try:
                 player = self.vlc_instance.media_player_new()
+                # Disable VLC mouse/key input so Qt receives events on the frame
+                player.video_set_mouse_input(False)
+                player.video_set_key_input(False)
                 media = self.vlc_instance.media_new(cam["url"], VLC_OPTS)
                 player.set_media(media)
                 set_player_window_for_platform(player, f)
@@ -488,6 +491,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 print(f"[ERROR] init player failed for {cam.get('name')}: {e}")
                 self._cam_players.append(None)
+
+            # Install event filter on each frame to capture right-click
+            f.installEventFilter(self)
             self._cam_play_ts.append(time.time())
 
         # Pre-create reusable filler (black) frames
@@ -495,6 +501,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             f = QtWidgets.QFrame(central)
             f.setStyleSheet("background: transparent; border: 0px;")
             f.hide()
+            f.installEventFilter(self)  # Capture right-click on fillers too
             self._filler_frames.append(f)
 
     def _rebuild_view(self):
@@ -1340,6 +1347,24 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QtCore.QTimer.singleShot(10, self._layout_and_attach)
+
+    def eventFilter(self, obj, event):
+        """Intercept right-click on any camera QFrame and show context menu."""
+        if event.type() == QtCore.QEvent.Type.MouseButtonPress:
+            if event.button() == QtCore.Qt.MouseButton.RightButton:
+                # Check if the object is one of our camera frames or filler frames
+                is_cam_frame = any(obj is f for (f, _l, _c) in self._cam_frames)
+                is_filler = any(obj is f for f in self._filler_frames)
+                if is_cam_frame or is_filler:
+                    global_pos = event.globalPosition().toPoint() if hasattr(event, 'globalPosition') else event.globalPos()
+                    menu_event = QtGui.QContextMenuEvent(
+                        QtGui.QContextMenuEvent.Reason.Mouse,
+                        event.pos(),
+                        global_pos,
+                    )
+                    self.contextMenuEvent(menu_event)
+                    return True  # Event handled
+        return super().eventFilter(obj, event)
 
     def showEvent(self, event):
         super().showEvent(event)
