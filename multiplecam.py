@@ -317,11 +317,17 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.pending_image_labels = defaultdict(list)
         self.pending_requests = set()
 
-        # These will be built by _rebuild_view
-        self.frames = []
-        self.players = []
+        # Persistent pool: one frame+player per camera, created once
+        self._cam_frames = []   # [(QFrame, QLabel, cam_dict)] for each cam in all_cams
+        self._cam_players = []  # [vlc.MediaPlayer | None] for each cam in all_cams
+        self._cam_play_ts = []  # last play attempt timestamp per cam
+
+        # Active view: indices into _cam_frames for the current page + black filler frames
+        self.frames = []        # [(QFrame, QLabel|None, cam_dict|None)] visible this page
+        self.players = []       # [player|None] visible this page (refs into _cam_players)
         self.last_play_attempts = []
         self.tile_map = {}
+        self._filler_frames = []  # reusable black filler frames
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowFlags(QtCore.Qt.WindowType.Window)
@@ -385,7 +391,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.time_timer.timeout.connect(self._update_time)
         self.time_timer.start()
 
-        # Build initial view (creates frames, players, tile_map)
+        # Create persistent pool of frames and players (created once, reused)
+        self._init_persistent_pool(central)
+
+        # Build initial view (sets visibility and tile_map without recreating players)
         self._rebuild_view()
 
         # Monitor connection status
@@ -441,43 +450,18 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Return total number of pages."""
         return max(1, (len(self.all_cams) + self.view_mode - 1) // self.view_mode)
 
-    def _rebuild_view(self):
-        """Rebuild frames, players, and tile_map for current page and view_mode."""
-        central = self.centralWidget()
+    def _init_persistent_pool(self, central):
+        """Create a persistent frame + player for every camera in all_cams.
 
-        # Move old players to background thread for async stop (avoid UI freeze)
-        old_players = list(self.players)
-        self.players.clear()
-        if old_players:
-            def _stop_old_players():
-                for p in old_players:
-                    try:
-                        if p:
-                            p.stop()
-                    except Exception:
-                        pass
-            threading.Thread(target=_stop_old_players, daemon=True).start()
-
-        # Hide and schedule deletion of existing frames and labels
-        for (frame, lbl, cam) in self.frames:
-            frame.hide()
-            frame.setParent(None)
-            frame.deleteLater()
-            if lbl:
-                lbl.hide()
-                lbl.setParent(None)
-                lbl.deleteLater()
-        self.frames.clear()
-
-        # Get cameras for current page
-        page_cams = self._get_page_cams()
-        num_cams = len(page_cams)
-
-        # Create frames and overlay labels for page cameras
-        for cam in page_cams:
+        Players are started once and kept alive across view-mode / page changes.
+        Only visibility and geometry change when the user switches views.
+        """
+        max_fillers = max(VIEW_MODES)  # pre-create enough filler frames
+        for cam in self.all_cams:
             f = QtWidgets.QFrame(central)
             f.setStyleSheet("background: transparent; border: 0px;")
-            f.show()
+            f.hide()  # hidden until needed
+
             lbl = QtWidgets.QLabel(central)
             lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             lbl.setStyleSheet("""
@@ -487,31 +471,88 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 font-size: 14px;
                 text-shadow: 1px 1px 2px black;
             """)
-            lbl.setText(f"{cam.get('name', '')}")
+            lbl.setText(cam.get('name', ''))
             lbl.adjustSize()
-            lbl.show()
-            lbl.raise_()
-            self.frames.append((f, lbl, cam))
+            lbl.hide()
 
-        # Add black tiles to fill the grid
-        grid_slots = self.view_mode
-        for _ in range(grid_slots - num_cams):
+            self._cam_frames.append((f, lbl, cam))
+
+            # Create and start player immediately
+            try:
+                player = self.vlc_instance.media_player_new()
+                media = self.vlc_instance.media_new(cam["url"], VLC_OPTS)
+                player.set_media(media)
+                set_player_window_for_platform(player, f)
+                player.play()
+                self._cam_players.append(player)
+            except Exception as e:
+                print(f"[ERROR] init player failed for {cam.get('name')}: {e}")
+                self._cam_players.append(None)
+            self._cam_play_ts.append(time.time())
+
+        # Pre-create reusable filler (black) frames
+        for _ in range(max_fillers):
             f = QtWidgets.QFrame(central)
             f.setStyleSheet("background: transparent; border: 0px;")
-            f.show()
-            self.frames.append((f, None, None))
+            f.hide()
+            self._filler_frames.append(f)
 
-        # Build tile map
+    def _rebuild_view(self):
+        """Switch visible frames for the current page/view_mode.
+
+        No players are destroyed or recreated — only visibility toggles.
+        """
+        # 1. Hide ALL persistent cam frames and labels
+        for (frame, lbl, _cam) in self._cam_frames:
+            frame.hide()
+            if lbl:
+                lbl.hide()
+
+        # Hide all fillers
+        for ff in self._filler_frames:
+            ff.hide()
+
+        # 2. Determine which cameras are on the current page
+        page_cams = self._get_page_cams()
+        num_cams = len(page_cams)
+        grid_slots = self.view_mode
+
+        # 3. Build the active frames list for this page
+        self.frames.clear()
+        self.players.clear()
+        self.last_play_attempts.clear()
+
+        # Map page cameras to their pool indices
+        cam_to_pool_idx = {id(cam): i for i, (_f, _l, cam) in enumerate(self._cam_frames)}
+
+        for cam in page_cams:
+            pool_idx = cam_to_pool_idx[id(cam)]
+            frame, lbl, cam_ref = self._cam_frames[pool_idx]
+            frame.show()
+            if lbl:
+                lbl.show()
+                lbl.raise_()
+            self.frames.append((frame, lbl, cam_ref))
+            self.players.append(self._cam_players[pool_idx])
+            self.last_play_attempts.append(self._cam_play_ts[pool_idx])
+
+        # 4. Add filler frames to fill the grid
+        fillers_needed = grid_slots - num_cams
+        for i in range(fillers_needed):
+            ff = self._filler_frames[i]
+            ff.show()
+            self.frames.append((ff, None, None))
+            self.players.append(None)
+            self.last_play_attempts.append(0.0)
+
+        # 5. Build tile map
         self.tile_map = self._get_tile_map(self.view_mode)
 
-        # Initialize play attempt tracking
-        self.last_play_attempts = [0.0] * grid_slots
-
-        # Update page indicator
+        # 6. Update page indicator and window title
         self._update_page_label()
         self._update_window_title()
 
-        # Ensure overlay labels stay on top
+        # 7. Ensure overlay labels stay on top
         if hasattr(self, 'group_label'):
             self.group_label.raise_()
         if hasattr(self, 'time_label'):
@@ -1147,7 +1188,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         return tile_map
 
     def _layout_and_attach(self):
-        """Set frame geometry based on tile map and attach players."""
+        """Set frame geometry based on tile map and re-attach persistent players."""
         screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
         geom = screen.geometry()
         sw, sh = geom.width(), geom.height()
@@ -1172,7 +1213,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             if hasattr(self, 'panel_visible') and self.panel_visible:
                 self.area_panel.raise_()
 
-        # Set geometry for each frame
+        # Set geometry for each frame and re-attach player to its frame
         for idx, (frame, lbl, cam) in enumerate(self.frames):
             if idx not in self.tile_map:
                 frame.setGeometry(0, 0, 0, 0)
@@ -1185,6 +1226,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             w = max(0, int(w))
             h = max(0, int(h))
             frame.setGeometry(int(x), int(y), w, h)
+
+            # Re-attach persistent player to this frame's window handle
+            player = self.players[idx] if idx < len(self.players) else None
+            if player:
+                set_player_window_for_platform(player, frame)
 
             if lbl:
                 lbl.adjustSize()
@@ -1207,33 +1253,6 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self.page_label.adjustSize()
             self.page_label.move((available_width - self.page_label.width()) // 2, sh - self.page_label.height() - 15)
             self.page_label.raise_()
-
-        # Attach or reassign players
-        if not self.players:
-            for idx, (frame, lbl, cam) in enumerate(self.frames):
-                if cam is None:  # Black tile
-                    self.players.append(None)
-                    continue
-                try:
-                    player = self.vlc_instance.media_player_new()
-                    media = self.vlc_instance.media_new(cam["url"], VLC_OPTS)
-                    player.set_media(media)
-                    set_player_window_for_platform(player, frame)
-                    player.play()
-                    self.players.append(player)
-                    if lbl:  # Raise label after attaching player
-                        lbl.adjustSize()
-                        lbl.raise_()
-                except Exception as e:
-                    print(f"[ERROR] attach player failed for {cam.get('name')}: {e}")
-                    self.players.append(None)
-        else:
-            for i, (frame, lbl, _) in enumerate(self.frames):
-                if i < len(self.players) and self.players[i]:
-                    set_player_window_for_platform(self.players[i], frame)
-                    if lbl:  # Raise label after reassigning player
-                        lbl.adjustSize()
-                        lbl.raise_()
 
     def _update_time(self):
         """Update the time label with current time."""
@@ -1286,7 +1305,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                         self.group_label.raise_()
 
     def _start_playback(self, idx):
-        """Start or restart playback for a specific camera."""
+        """Start or restart playback for a specific camera (uses persistent pool)."""
         if idx >= len(self.frames) or self.frames[idx][2] is None:
             return
         frame, lbl, cam = self.frames[idx]
@@ -1297,6 +1316,13 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if now - self.last_play_attempts[idx] < 1.0:
             return
         self.last_play_attempts[idx] = now
+
+        # Also update the pool timestamp so monitor stays consistent
+        cam_to_pool = {id(c): i for i, (_f, _l, c) in enumerate(self._cam_frames)}
+        pool_idx = cam_to_pool.get(id(cam))
+        if pool_idx is not None:
+            self._cam_play_ts[pool_idx] = now
+
         try:
             player = self.players[idx]
             if player:
@@ -1428,7 +1454,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if self.current_page >= total_pages:
             self.current_page = total_pages - 1
         self._rebuild_view()
-        QtCore.QTimer.singleShot(200, self._finish_rebuild)
+        # Short delay for Qt geometry update, then re-attach players (no restart needed)
+        QtCore.QTimer.singleShot(50, self._finish_rebuild)
 
     def _next_page(self):
         """Navigate to the next page of cameras."""
@@ -1436,7 +1463,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._rebuilding = True
             self.current_page += 1
             self._rebuild_view()
-            QtCore.QTimer.singleShot(200, self._finish_rebuild)
+            QtCore.QTimer.singleShot(50, self._finish_rebuild)
 
     def _prev_page(self):
         """Navigate to the previous page of cameras."""
@@ -1444,7 +1471,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._rebuilding = True
             self.current_page -= 1
             self._rebuild_view()
-            QtCore.QTimer.singleShot(200, self._finish_rebuild)
+            QtCore.QTimer.singleShot(50, self._finish_rebuild)
 
     def _finish_rebuild(self):
         """Called after rebuild delay to attach players and resume monitoring."""
@@ -1468,8 +1495,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             except Exception:
                 pass
         
-        # Stop players
-        for p in self.players:
+        # Stop ALL persistent pool players (not just the active page)
+        for p in self._cam_players:
             try:
                 if p:
                     p.stop()
