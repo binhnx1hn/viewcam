@@ -1,0 +1,132 @@
+api:
+  listen: :${GO2RTC_API_PORT}
+  base_path: ${PROXY_PREFIX}
+  origin: '*'
+rtsp:
+  listen: :${RTSP_PORT}
+  default_query: video
+webrtc:
+  listen: :8555
+ice:
+  servers: []
+  candidates:
+  - ${PUBLIC_HOST}
+rtmp:
+  listen: :11935
+streams:
+  b8f3d30bf1c346e37d3cba37_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.160:554/ch01
+  c0e3be4e63002c75ba05748a_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.149:554/ch01
+  75b573a2a80f7d1f54f711b8_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.155:554/ch01
+  c064aa5670a62419ecc714e0_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.168:554/ch01
+  f35b705e8c57ae59e369ebc9_origin:
+  - rtsp://service:Bosch123%25@192.168.22.174:554/stream1
+  43ba9900ff2fc7d9d3207254_origin:
+  - rtsp://service:Bosch123%25@192.168.22.173:554/stream1
+  5a90dccf0259cc883dd91c7a_origin:
+  - rtsp://service:Bosch123%25@192.168.22.176:554/stream1
+  f1c9d16d7f35450ac3171d20_origin:
+  - rtsp://service:Bosch123%25@192.168.22.175:554/stream1
+  83567cd28bc5c1e1749a19fa_origin:
+  - rtsp://service:Bosch123%25@192.168.22.177:554/stream1
+  643b0662422d1d0dffa3fca2_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.158:554/ch01
+  e902674982fc99aa343cdd94_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.165:554/ch01
+  2468649b6215c4cdd2aef509_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.164:554/ch01
+  bc666a1cd3460379f3d05a2a_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.154:554/ch01
+  0cca06a7ff96faf82be08131_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.159:554/ch01
+  62a40e1d98804e00e4ce08d2_origin:
+  - rtsp://admin:Benta123%25@192.168.22.161:554/profile2/media.smp
+  c90776dbac058ed6957f476e_origin:
+  - rtsp://admin:Taikhoan1@192.168.22.170:554
+  - rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa
+  - rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0
+  - rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20
+  - rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a
+  - rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a
+  - rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8
+  - rtsp://192.168.22.3:8564/bbox/0cca06a7ff96faf82be08131
+  - rtsp://192.168.22.3:8564/bbox/c90776dbac058ed6957f476e
+  8acfe827853aff5217d7ef21_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.157:554/ch01
+  7975566a25bafcc34f6109d3_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.163:554/ch01
+  084babdcdda0e2f987d9d505_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.162:554/ch01
+  - rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3
+  - rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505
+  ed90f7f5841740336de541fe_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.151:554/ch01
+  - rtsp://192.168.22.3:8564/bbox/ed90f7f5841740336de541fe
+  - rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a
+  - rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21
+  f4ebc728df05346e7d2f785b_origin:
+  - rtsp://service:Bosch123%25@192.168.22.171:554/stream1
+  0b92b8b2602c011d1831c6c2_origin:
+  - rtsp://service:Bosch123%25@192.168.22.172:554/stream1
+  - rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2
+  - rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b
+  e6a6a63057a146f86c6d0f94_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.150:554/ch01
+  95dfde4807d4d6a9eec49920_origin:
+  - rtsp://admin:UNV123456%25@192.168.22.156:554/ch01
+  - rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94
+  - rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0
+  - rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505
+  - rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20
+  - rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa
+  - rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a
+  - rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b
+  - rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3
+  - rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a
+  - rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a
+  - rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21
+  - rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94
+  - rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2
+  - rtsp://192.168.22.3:8564/bbox/0cca06a7ff96faf82be08131
+  - rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8
+  - rtsp://192.168.22.3:8564/bbox/ed90f7f5841740336de541fe
+  - rtsp://192.168.22.3:8564/bbox/c90776dbac058ed6957f476e
+  0cca06a7ff96faf82be08131_people:
+  - rtsp://192.168.22.3:8564/bbox/0cca06a7ff96faf82be08131
+  f1c9d16d7f35450ac3171d20_people:
+  - rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20
+  83567cd28bc5c1e1749a19fa_people:
+  - rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa
+  0b92b8b2602c011d1831c6c2_people:
+  - rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2
+  75b573a2a80f7d1f54f711b8_people:
+  - rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8
+  c064aa5670a62419ecc714e0_people:
+  - rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0
+  f4ebc728df05346e7d2f785b_people:
+  - rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b
+  5a90dccf0259cc883dd91c7a_people:
+  - rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a
+  e6a6a63057a146f86c6d0f94_people:
+  - rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94
+  7975566a25bafcc34f6109d3_people:
+  - rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3
+  c0e3be4e63002c75ba05748a_people:
+  - rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a
+  084babdcdda0e2f987d9d505_people:
+  - rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505
+  8acfe827853aff5217d7ef21_people:
+  - rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21
+  c90776dbac058ed6957f476e_people:
+  - rtsp://192.168.22.3:8564/bbox/c90776dbac058ed6957f476e
+  ed90f7f5841740336de541fe_people:
+  - rtsp://192.168.22.3:8564/bbox/ed90f7f5841740336de541fe
+  bc666a1cd3460379f3d05a2a_people:
+  - rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a
+  9ac31f8f5bc8fc857418e778_origin:
+    - rtsp://admin:QXKXOD@192.168.22.127:554/stream1
+  9ac31f8f5bc8fc857418e778_people:
+    - rtsp://192.168.22.3:8564/bbox/9ac31f8f5bc8fc857418e778

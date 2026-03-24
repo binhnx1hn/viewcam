@@ -54,9 +54,14 @@ VLC_OPTS = (
 )
 PANEL_WIDTH = 350  # Width of the right-side panel for area counts
 MAX_CAMS_PER_WINDOW = 16  # Maximum cameras per window
-VIEW_MODES = [1, 4, 9, 16]  # Available view modes: 1x1, 2x2, 3x3, 4x4
+VIEW_MODES = [1, 2, 4, 9, 16]  # Available view modes: 1x1, 1x2, 2x2, 3x3, 4x4
 DEFAULT_VIEW_MODE = 4  # Default view mode (2x2 grid)
 AUTO_ROTATE_INTERVAL = 30000  # Auto-rotate interval in ms (30 seconds) for single-cam view
+
+# ---------- Stream mode ----------
+# "people_stream" = use AI-processed bbox stream (fall back to origin_url if people_stream is empty)
+# "origin_url"    = always use direct camera RTSP
+STREAM_MODE = "people_stream"
 
 
 def normalize_area_name(area_name: str) -> str:
@@ -74,53 +79,83 @@ IMAGE_BASE_URL = "http://192.168.22.2:10000/movis_data"  # Base URL for face ima
 CSV_IMAGE_BASE_URL = "http://192.168.22.2:10000"  # Base URL for CSV images
 
 # ---------- Fallback camera list (used if JSON file is not found) ----------
+# Each entry carries both origin_url (direct RTSP) and people_stream (AI bbox stream).
+# The 'url' field is resolved at runtime by resolve_cam_url() based on STREAM_MODE.
 DEFAULT_CAM_LIST = [
-    {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/f35b705e8c57ae59e369ebc9", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/43ba9900ff2fc7d9d3207254", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A14", "camera_id": "43ba9900ff2fc7d9d3207254"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC HÀNG RÀO", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"}, 
-    {"url": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},    
-    {"url": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "area": "KHU VỰC KSAN", "name": "C21", "camera_id": "5a90dccf0259cc883dd91c7a"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20", "area": "KHU VỰC KSAN", "name": "C22", "camera_id": "f1c9d16d7f35450ac3171d20"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "area": "KHU VỰC KSAN", "name": "C23", "camera_id": "83567cd28bc5c1e1749a19fa"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
-    {"url": "rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"}
+    {"url": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "origin_url": "rtsp://service:Bosch123%@192.168.22.171:554/stream1", "people_stream": "rtsp://192.168.22.3:8564/bbox/f4ebc728df05346e7d2f785b", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A11", "camera_id": "f4ebc728df05346e7d2f785b"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "origin_url": "rtsp://service:Bosch123%@192.168.22.172:554/stream1", "people_stream": "rtsp://192.168.22.3:8564/bbox/0b92b8b2602c011d1831c6c2", "area": "KHU VỰC BUỒNG GIAM 01", "name": "A12", "camera_id": "0b92b8b2602c011d1831c6c2"},
+    {"url": "rtsp://service:Bosch123%@192.168.22.174:554/stream1", "origin_url": "rtsp://service:Bosch123%@192.168.22.174:554/stream1", "people_stream": "", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A13", "camera_id": "f35b705e8c57ae59e369ebc9"},
+    {"url": "rtsp://service:Bosch123%@192.168.22.173:554/stream1", "origin_url": "rtsp://service:Bosch123%@192.168.22.173:554/stream1", "people_stream": "", "area": "KHU VỰC BUỒNG GIAM 02", "name": "A14", "camera_id": "43ba9900ff2fc7d9d3207254"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "origin_url": "rtsp://admin:UNV123456%@192.168.22.168:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0", "area": "KHU VỰC HÀNG RÀO", "name": "B11", "camera_id": "c064aa5670a62419ecc714e0"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "origin_url": "rtsp://admin:UNV123456%@192.168.22.157:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/8acfe827853aff5217d7ef21", "area": "KHU VỰC HÀNG RÀO", "name": "B12", "camera_id": "8acfe827853aff5217d7ef21"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "origin_url": "rtsp://service:Bosch123%@192.168.22.176:554/stream1", "people_stream": "rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a", "area": "KHU VỰC KSAN", "name": "C21", "camera_id": "5a90dccf0259cc883dd91c7a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20", "origin_url": "rtsp://service:Bosch123%@192.168.22.175:554/stream1", "people_stream": "rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20", "area": "KHU VỰC KSAN", "name": "C22", "camera_id": "f1c9d16d7f35450ac3171d20"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "origin_url": "rtsp://service:Bosch123%@192.168.22.177:554/stream1", "people_stream": "rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa", "area": "KHU VỰC KSAN", "name": "C23", "camera_id": "83567cd28bc5c1e1749a19fa"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "origin_url": "rtsp://admin:UNV123456%@192.168.22.149:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D11", "camera_id": "c0e3be4e63002c75ba05748a"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "origin_url": "rtsp://admin:UNV123456%@192.168.22.155:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8", "area": "KHU VỰC CỔNG TRẠI 02", "name": "D12", "camera_id": "75b573a2a80f7d1f54f711b8"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "origin_url": "rtsp://admin:UNV123456%@192.168.22.150:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/e6a6a63057a146f86c6d0f94", "area": "KHU VỰC LAO ĐỘNG", "name": "E11", "camera_id": "e6a6a63057a146f86c6d0f94"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505", "origin_url": "rtsp://admin:UNV123456%@192.168.22.162:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/084babdcdda0e2f987d9d505", "area": "KHU VỰC LAO ĐỘNG", "name": "E12", "camera_id": "084babdcdda0e2f987d9d505"},
+    {"url": "rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3", "origin_url": "rtsp://admin:UNV123456%@192.168.22.163:554/ch01", "people_stream": "rtsp://192.168.22.3:8564/bbox/7975566a25bafcc34f6109d3", "area": "KHU VỰC LAO ĐỘNG", "name": "E13", "camera_id": "7975566a25bafcc34f6109d3"}
 ]
 
 
 # ---------- Helpers ----------
+def resolve_cam_url(cam: dict) -> None:
+    """
+    Resolve cam["url"] in-place based on the current STREAM_MODE.
+
+    Rules:
+    - If STREAM_MODE == "people_stream" and cam["people_stream"] is non-empty → use people_stream
+    - Otherwise fall back to cam["origin_url"] if present, else keep existing cam["url"]
+
+    Args:
+        cam: Camera dictionary (mutated in-place)
+    """
+    people_stream = cam.get("people_stream", "")
+    origin_url = cam.get("origin_url", "")
+
+    if STREAM_MODE == "people_stream" and people_stream:
+        cam["url"] = people_stream
+    elif origin_url:
+        cam["url"] = origin_url
+    # else: leave cam["url"] unchanged (backward compat for entries without both fields)
+
+
 def load_cameras_from_json(json_file: str = None) -> list:
     """
-    Load camera list from JSON file
-    
+    Load camera list from JSON file and resolve each camera's active URL
+    based on the current STREAM_MODE.
+
     Args:
         json_file: Path to JSON file. If None, uses default CAMERA_JSON_FILE
-    
+
     Returns:
         List of camera dictionaries. Returns DEFAULT_CAM_LIST if file not found or invalid.
     """
     if json_file is None:
         json_file = CAMERA_JSON_FILE
-    
+
     try:
         if not os.path.exists(json_file):
             print(f"[WARN] Camera JSON file not found: {json_file}")
             print("[INFO] Using default camera list")
-            return DEFAULT_CAM_LIST.copy()
-        
+            cams = [dict(c) for c in DEFAULT_CAM_LIST]
+            for cam in cams:
+                resolve_cam_url(cam)
+            return cams
+
         with open(json_file, 'r', encoding='utf-8') as f:
             cameras = json.load(f)
-        
+
         # Validate structure
         if not isinstance(cameras, list):
             print(f"[ERROR] Invalid JSON structure: expected list, got {type(cameras)}")
             print("[INFO] Using default camera list")
-            return DEFAULT_CAM_LIST.copy()
-        
+            cams = [dict(c) for c in DEFAULT_CAM_LIST]
+            for cam in cams:
+                resolve_cam_url(cam)
+            return cams
+
         # Validate each camera has required fields
         valid_cameras = []
         for idx, cam in enumerate(cameras):
@@ -130,24 +165,35 @@ def load_cameras_from_json(json_file: str = None) -> list:
             if 'url' not in cam or 'area' not in cam:
                 print(f"[WARN] Skipping invalid camera at index {idx}: missing 'url' or 'area'")
                 continue
+            # Resolve active URL based on current STREAM_MODE
+            resolve_cam_url(cam)
             valid_cameras.append(cam)
-        
+
         if not valid_cameras:
             print("[ERROR] No valid cameras found in JSON file")
             print("[INFO] Using default camera list")
-            return DEFAULT_CAM_LIST.copy()
-        
+            cams = [dict(c) for c in DEFAULT_CAM_LIST]
+            for cam in cams:
+                resolve_cam_url(cam)
+            return cams
+
         print(f"[INFO] Loaded {len(valid_cameras)} cameras from {json_file}")
         return valid_cameras
-    
+
     except json.JSONDecodeError as e:
         print(f"[ERROR] Failed to parse JSON file: {e}")
         print("[INFO] Using default camera list")
-        return DEFAULT_CAM_LIST.copy()
+        cams = [dict(c) for c in DEFAULT_CAM_LIST]
+        for cam in cams:
+            resolve_cam_url(cam)
+        return cams
     except Exception as e:
         print(f"[ERROR] Failed to load camera JSON file: {e}")
         print("[INFO] Using default camera list")
-        return DEFAULT_CAM_LIST.copy()
+        cams = [dict(c) for c in DEFAULT_CAM_LIST]
+        for cam in cams:
+            resolve_cam_url(cam)
+        return cams
 
 
 def load_subject_images_from_csv(csv_file: str = None) -> dict:
@@ -251,21 +297,28 @@ class AreaCountTracker:
             dept_info = get_department_info(department_id) if SOCKET_AVAILABLE else {}
             area = dept_info.get('area', '') if dept_info else ''
             
-            # Nếu không có area, sử dụng department_id làm area
+            # If there's no area from mapping, try treating `department_id` as the area name.
+            # This happens when the socket payload is missing `department_id`,
+            # and the frontend uses `window_area` as a fallback key to still show the panel.
             if not area:
-                area = f"UNKNOWN_AREA ({department_id[:8]}...)"
+                if normalize_area_name(department_id) in ALLOWED_RECOGNITION_AREAS:
+                    area = department_id
+                else:
+                    area = f"UNKNOWN_AREA ({department_id[:8]}...)"
             
             # Cộng dồn counts vào area
             area_counts[area]['prisoner'] += counts['prisoner']
             area_counts[area]['officer'] += counts['officer']
             area_counts[area]['relative'] += counts['relative']
             
-            # Tổng hợp list_person (chỉ lấy những người có subject_name, face_url, và score)
+            # Aggregate list_person for display.
             if 'list_person' in counts:
                 for person in counts['list_person']:
-                    if (person.get('subject_name') and 
-                        person.get('face_url') and 
-                        person.get('score', 0) > 0):
+                    # Socket payload may have empty `subject_name` and `score=0`,
+                    # and sometimes `face_url` itself can be empty too.
+                    # We include the person if we have an identity (face_id/track_id),
+                    # so the UI can show a placeholder when `face_url` is missing.
+                    if person.get('face_id') or person.get('track_id'):
                         area_counts[area]['list_person'].append(person)
         
         return area_counts
@@ -285,6 +338,184 @@ def set_player_window_for_platform(player: vlc.MediaPlayer, frame: QtWidgets.QFr
     except Exception as e:
         print("[WARN] set_player_window failed:", e)
 
+# ---------- Camera selection dialog ----------
+class CameraSelectDialog(QtWidgets.QDialog):
+    """Dialog for selecting which cameras to display in a window."""
+
+    def __init__(self, all_cameras: list, selected_cams: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Chọn camera hiển thị")
+        self.setMinimumSize(420, 520)
+        self.all_cameras = all_cameras
+        selected_urls = {c["url"] for c in selected_cams}
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        # Title
+        title = QtWidgets.QLabel("Chọn camera cho cửa sổ này:")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #FFA500; padding: 6px;")
+        layout.addWidget(title)
+
+        # Select all / Deselect all buttons
+        btn_row = QtWidgets.QHBoxLayout()
+        select_all_btn = QtWidgets.QPushButton("☑ Chọn tất cả")
+        select_all_btn.setStyleSheet(self._btn_style())
+        select_all_btn.clicked.connect(self._select_all)
+        deselect_all_btn = QtWidgets.QPushButton("☐ Bỏ chọn tất cả")
+        deselect_all_btn.setStyleSheet(self._btn_style())
+        deselect_all_btn.clicked.connect(self._deselect_all)
+        btn_row.addWidget(select_all_btn)
+        btn_row.addWidget(deselect_all_btn)
+        layout.addLayout(btn_row)
+
+        # Scroll area with checkboxes grouped by area
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea { border: none; background: #1e1e1e; }
+            QScrollBar:vertical {
+                background: #2a2a2a; width: 10px; border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #FFA500; min-height: 30px; border-radius: 5px;
+            }
+        """)
+        scroll_widget = QtWidgets.QWidget()
+        scroll_widget.setStyleSheet("background: #1e1e1e;")
+        scroll_layout = QtWidgets.QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(8)
+
+        # Group cameras by area
+        from collections import OrderedDict
+        area_groups = OrderedDict()
+        for cam in all_cameras:
+            area = cam.get("area", "Không xác định")
+            area_groups.setdefault(area, []).append(cam)
+
+        self.checkboxes = []      # list of (QCheckBox, cam_dict)
+        self._area_cbs = {}       # area_name -> list of QCheckBox (for area toggle)
+
+        for area, cams in area_groups.items():
+            group = QtWidgets.QGroupBox()
+            group.setStyleSheet("""
+                QGroupBox {
+                    border: 2px solid #555; border-radius: 6px;
+                    margin-top: 0px; padding: 10px 10px 10px 10px;
+                    background: #252525;
+                }
+            """)
+            group_layout = QtWidgets.QVBoxLayout(group)
+            group_layout.setSpacing(4)
+
+            # Area header with toggle button
+            header_row = QtWidgets.QHBoxLayout()
+            area_label = QtWidgets.QLabel(f"📍 {area}")
+            area_label.setStyleSheet("""
+                color: #FFA500; font-size: 14px; font-weight: bold;
+                background: transparent; padding: 4px;
+            """)
+            header_row.addWidget(area_label)
+            header_row.addStretch()
+
+            toggle_btn = QtWidgets.QPushButton("Chọn khu vực")
+            toggle_btn.setStyleSheet("""
+                QPushButton {
+                    background: #444; color: #FFA500; font-size: 12px;
+                    padding: 4px 12px; border-radius: 3px; border: 1px solid #FFA500;
+                }
+                QPushButton:hover { background: #555; }
+            """)
+            toggle_btn.setFixedHeight(28)
+            header_row.addWidget(toggle_btn)
+            group_layout.addLayout(header_row)
+
+            # Separator
+            sep = QtWidgets.QFrame()
+            sep.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+            sep.setStyleSheet("background: #555; max-height: 1px; border: none;")
+            group_layout.addWidget(sep)
+
+            area_cb_list = []
+            for cam in cams:
+                name = cam.get("name", cam.get("url", ""))
+                cb = QtWidgets.QCheckBox(f"  {name}")
+                cb.setChecked(cam["url"] in selected_urls)
+                cb.setToolTip(cam["url"])
+                cb.setStyleSheet("""
+                    QCheckBox {
+                        color: #e0e0e0; font-size: 14px;
+                        padding: 5px 4px; spacing: 8px;
+                        background: transparent;
+                    }
+                    QCheckBox:hover { color: #FFA500; }
+                """)
+                group_layout.addWidget(cb)
+                self.checkboxes.append((cb, cam))
+                area_cb_list.append(cb)
+
+            self._area_cbs[area] = area_cb_list
+            # Connect toggle button
+            toggle_btn.clicked.connect(
+                lambda checked, a=area: self._toggle_area(a)
+            )
+
+            scroll_layout.addWidget(group)
+
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+
+        # OK / Cancel buttons
+        btn_layout = QtWidgets.QHBoxLayout()
+        ok_btn = QtWidgets.QPushButton("✔ Áp dụng")
+        ok_btn.setStyleSheet(self._btn_style())
+        ok_btn.clicked.connect(self.accept)
+        cancel_btn = QtWidgets.QPushButton("✖ Hủy")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background: #555; color: white; font-weight: bold;
+                font-size: 14px; padding: 8px 20px; border-radius: 4px; border: none;
+            }
+            QPushButton:hover { background: #777; }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+    @staticmethod
+    def _btn_style():
+        return """
+            QPushButton {
+                background: #FFA500; color: #1e1e1e; font-weight: bold;
+                font-size: 14px; padding: 8px 20px; border-radius: 4px; border: none;
+            }
+            QPushButton:hover { background: #FFB733; }
+        """
+
+    def _toggle_area(self, area_name: str):
+        """Toggle all checkboxes in an area. If any unchecked -> check all; else uncheck all."""
+        cbs = self._area_cbs.get(area_name, [])
+        if not cbs:
+            return
+        any_unchecked = any(not cb.isChecked() for cb in cbs)
+        for cb in cbs:
+            cb.setChecked(any_unchecked)
+
+    def _select_all(self):
+        for cb, _ in self.checkboxes:
+            cb.setChecked(True)
+
+    def _deselect_all(self):
+        for cb, _ in self.checkboxes:
+            cb.setChecked(False)
+
+    def get_selected_cameras(self) -> list:
+        """Return list of selected camera dicts."""
+        return [cam for cb, cam in self.checkboxes if cb.isChecked()]
+
+
 # ---------- Custom layout window with dynamic tiling ----------
 class CustomLayoutWindow(QtWidgets.QMainWindow):
     """
@@ -298,9 +529,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
 
     RECONNECT_INTERVAL = 5  # seconds
 
-    def __init__(self, all_cams, vlc_instance: vlc.Instance, group_name: str, parent=None):
+    def __init__(self, all_cams, vlc_instance: vlc.Instance, group_name: str,
+                 all_available_cameras: list = None, parent=None):
         super().__init__(parent)
-        self.all_cams = all_cams  # Store ALL cameras for pagination
+        self.all_cams = all_cams  # Cameras assigned to this window
+        self._all_available_cameras = all_available_cameras or all_cams  # Full camera list for selection dialog
         self.vlc_instance = vlc_instance
         self.group_name = group_name
         self.view_mode = DEFAULT_VIEW_MODE  # Current view mode (1, 4, 9, 16)
@@ -342,20 +575,20 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # Create right panel for area counts
         self._create_area_panel(central)
 
-        # Group label (hidden — no longer displayed at top-right)
+        # Group label — shown at top-right corner by default
         self.group_label = QtWidgets.QLabel(central)
-        self.group_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.group_label.setStyleSheet("""
-            background: transparent;
+            background: rgba(0, 0, 0, 120);
             color: #FFA500;
-            font-size: 22px;
+            font-size: 18px;
             font-weight: bold;
-            padding: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
             text-shadow: 1px 1px 2px black;
         """)
         self.group_label.setText(f"{group_name}")
         self.group_label.adjustSize()
-        self.group_label.hide()
+        self.group_label.show()
 
         # Time label
         self.time_label = QtWidgets.QLabel(central)
@@ -649,8 +882,18 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # self.area_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         # panel_layout.addWidget(self.area_status_label)
         
-        # Initially hide the panel (will show when data is available)
-        self.area_panel.hide()
+        # For recognized areas (buồng giam), show panel immediately with zeros
+        # For other areas, hide it (will be shown when data is available)
+        window_area = None
+        if self.all_cams:
+            window_area = self.all_cams[0].get('area')
+        
+        if window_area and normalize_area_name(window_area) in ALLOWED_RECOGNITION_AREAS:
+            # Will be shown after _layout_and_attach
+            self.area_panel.hide()
+        else:
+            self.area_panel.hide()
+        
         self.area_panel.raise_()
     
     def _init_socket(self):
@@ -665,10 +908,19 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                     department_id = payload.get('department_id')
                     data_count = payload.get('data_count')
                     list_person = payload.get('list_person', [])
-                    
-                    if department_id and data_count:
-                        self.area_tracker.update_counts(department_id, data_count, list_person)
-                        QtCore.QTimer.singleShot(0, self._update_area_panel)
+
+                    # The backend may send an empty `department_id`.
+                    # For buồng giam 01/02 windows, we use `window_area` as a fallback.
+                    if data_count:
+                        effective_department_id = department_id
+                        if not effective_department_id and self.all_cams:
+                            window_area = self.all_cams[0].get('area')
+                            if window_area and normalize_area_name(window_area) in ALLOWED_RECOGNITION_AREAS:
+                                effective_department_id = window_area
+
+                        if effective_department_id:
+                            self.area_tracker.update_counts(effective_department_id, data_count, list_person)
+                            QtCore.QTimer.singleShot(0, self._update_area_panel)
                 
                 elif isinstance(payload, str):
                     try:
@@ -677,10 +929,17 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                             department_id = parsed.get('department_id')
                             data_count = parsed.get('data_count')
                             list_person = parsed.get('list_person', [])
-                            
-                            if department_id and data_count:
-                                self.area_tracker.update_counts(department_id, data_count, list_person)
-                                QtCore.QTimer.singleShot(0, self._update_area_panel)
+
+                            if data_count:
+                                effective_department_id = department_id
+                                if not effective_department_id and self.all_cams:
+                                    window_area = self.all_cams[0].get('area')
+                                    if window_area and normalize_area_name(window_area) in ALLOWED_RECOGNITION_AREAS:
+                                        effective_department_id = window_area
+
+                                if effective_department_id:
+                                    self.area_tracker.update_counts(effective_department_id, data_count, list_person)
+                                    QtCore.QTimer.singleShot(0, self._update_area_panel)
                     except json.JSONDecodeError:
                         pass
             except Exception as e:
@@ -721,9 +980,18 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         if self._panel_user_hidden:
             return
 
+        # Detect window's area from first camera (more reliable than parsing group_name)
+        window_area = None
+        if self.all_cams:
+            window_area = self.all_cams[0].get('area')
+        
         # Panel only applies to specific areas
-        normalized_group = normalize_area_name(self.group_name)
-        if normalized_group not in ALLOWED_RECOGNITION_AREAS:
+        if not window_area:
+            self._hide_panel()
+            return
+        
+        normalized_area = normalize_area_name(window_area)
+        if normalized_area not in ALLOWED_RECOGNITION_AREAS:
             self._hide_panel()
             return
         
@@ -732,22 +1000,18 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._hide_panel()
             return
         
-        # Get all area counts
+        # Get all area counts from tracker
         all_area_counts = self.area_tracker.get_area_counts()
         
-        # Hide panel if no data at all
-        if not all_area_counts:
-            self._hide_panel()
-            return
-        
-        # Filter to only show this window's area (group_name)
+        # Filter to only show this window's area
         counts = None
-        for area_name, area_counts in all_area_counts.items():
-            if normalize_area_name(area_name) == normalized_group:
-                counts = area_counts
-                break
+        if all_area_counts:
+            for area_name, area_counts in all_area_counts.items():
+                if normalize_area_name(area_name) == normalized_area:
+                    counts = area_counts
+                    break
 
-        # If no live data yet, still show panel with zeros
+        # If no live data yet, still show panel with zeros (for recognized areas)
         if not counts:
             counts = {
                 "prisoner": 0,
@@ -1182,15 +1446,29 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         return widget
 
     def _get_tile_map(self, view_mode: int):
-        """Return tile boundaries for a uniform NxN grid based on view_mode.
+        """Return tile boundaries for grid based on view_mode.
 
         Args:
-            view_mode: Number of grid slots (1, 4, 9, or 16).
+            view_mode: Number of grid slots (1, 2, 4, 9, or 16).
+                - 1: 1x1
+                - 2: 1x2 (1 col, 2 rows)
+                - 4: 2x2
+                - 9: 3x3
+                - 16: 4x4
 
         Returns:
             Dict mapping slot index to (x_start, y_start, x_end, y_end).
         """
         import math
+        
+        # Special case for view_mode=2 (1x2 layout: 1 column, 2 rows)
+        if view_mode == 2:
+            return {
+                0: (0, 0, 1, 1),  # Top camera: col 0, row 0
+                1: (0, 1, 1, 2),  # Bottom camera: col 0, row 1
+            }
+        
+        # For other modes, use square grid (NxN)
         n = int(math.sqrt(view_mode))  # 1->1, 4->2, 9->3, 16->4
         tile_map = {}
         idx = 0
@@ -1250,8 +1528,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 lbl.move(frame.x() + 8, frame.y() + frame.height() - lbl.height() - 8)
                 lbl.raise_()
 
-        # Position group label (adjust for panel)
+        # Position group label at top-right corner (adjust for panel)
         if self.group_label:
+            self.group_label.adjustSize()
             self.group_label.move(available_width - self.group_label.width() - 20, 10)
             self.group_label.raise_()
 
@@ -1391,10 +1670,12 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         elif event.key() == QtCore.Qt.Key.Key_1:
             self._change_view_mode(1)
         elif event.key() == QtCore.Qt.Key.Key_2:
-            self._change_view_mode(4)
+            self._change_view_mode(2)
         elif event.key() == QtCore.Qt.Key.Key_3:
-            self._change_view_mode(9)
+            self._change_view_mode(4)
         elif event.key() == QtCore.Qt.Key.Key_4:
+            self._change_view_mode(9)
+        elif event.key() == QtCore.Qt.Key.Key_5:
             self._change_view_mode(16)
         else:
             super().keyPressEvent(event)
@@ -1433,7 +1714,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # ---------- View mode submenu ----------
         view_menu = menu.addMenu("🖥️ Chế độ xem")
         view_menu.setStyleSheet(menu_style)
-        mode_labels = {1: "1 cam (1×1)", 4: "4 cam (2×2)", 9: "9 cam (3×3)", 16: "16 cam (4×4)"}
+        mode_labels = {1: "1 cam (1×1)", 2: "2 cam (1×2)", 4: "4 cam (2×2)", 9: "9 cam (3×3)", 16: "16 cam (4×4)"}
         for mode in VIEW_MODES:
             label = mode_labels.get(mode, f"{mode} cam")
             if mode == self.view_mode:
@@ -1463,6 +1744,37 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 panel_action = menu.addAction("📊 Ẩn bảng nhận diện")
             panel_action.triggered.connect(self._toggle_panel)
 
+        # ---------- Camera selection ----------
+        menu.addSeparator()
+        cam_select_action = menu.addAction(f"📷 Chọn camera ({len(self.all_cams)}/{len(self._all_available_cameras)})")
+        cam_select_action.triggered.connect(self._show_camera_select_dialog)
+
+        # ---------- Area label toggle/rename ----------
+        menu.addSeparator()
+        if self.group_label and self.group_label.isVisible():
+            label_toggle_action = menu.addAction("🏷️ Ẩn tên khu vực")
+        else:
+            label_toggle_action = menu.addAction("🏷️ Hiện tên khu vực")
+        label_toggle_action.triggered.connect(self._toggle_group_label)
+
+        rename_action = menu.addAction("✏️ Đổi tên khu vực")
+        rename_action.triggered.connect(self._rename_group_label)
+
+        # ---------- Stream mode toggle ----------
+        menu.addSeparator()
+        stream_menu = menu.addMenu("🎯 Chế độ luồng")
+        stream_menu.setStyleSheet(menu_style)
+
+        # "people_stream" option — shows checkmark when active
+        ai_label = ("✔ " if STREAM_MODE == "people_stream" else "   ") + "Luồng AI"
+        ai_action = stream_menu.addAction(ai_label)
+        ai_action.triggered.connect(lambda: self._set_stream_mode("people_stream"))
+
+        # "origin_url" option — shows checkmark when active
+        origin_label = ("✔ " if STREAM_MODE == "origin_url" else "   ") + "📷 Luồng gốc"
+        origin_action = stream_menu.addAction(origin_label)
+        origin_action.triggered.connect(lambda: self._set_stream_mode("origin_url"))
+
         # ---------- Fullscreen toggle ----------
         menu.addSeparator()
         if self._fullscreen:
@@ -1473,6 +1785,78 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         fs_action.triggered.connect(lambda: setattr(self, '_fullscreen', not self._fullscreen))
 
         menu.exec(event.globalPos())
+
+    def _toggle_group_label(self):
+        """Toggle the area name label visibility."""
+        if self.group_label:
+            if self.group_label.isVisible():
+                self.group_label.hide()
+            else:
+                self.group_label.show()
+                self.group_label.raise_()
+
+    def _rename_group_label(self):
+        """Open input dialog to rename the area label."""
+        current_name = self.group_name
+        new_name, ok = QtWidgets.QInputDialog.getText(
+            self,
+            "Đổi tên khu vực",
+            "Nhập tên mới:",
+            QtWidgets.QLineEdit.EchoMode.Normal,
+            current_name,
+        )
+        if ok and new_name.strip():
+            self.group_name = new_name.strip()
+            self.group_label.setText(self.group_name)
+            self.group_label.adjustSize()
+            self._update_window_title()
+            # Re-position label after text resize
+            screen = self.windowHandle().screen() if self.windowHandle() else QtWidgets.QApplication.primaryScreen()
+            sw = screen.geometry().width()
+            available_width = sw - PANEL_WIDTH if (hasattr(self, 'panel_visible') and self.panel_visible) else sw
+            self.group_label.move(available_width - self.group_label.width() - 20, 10)
+            self.group_label.raise_()
+
+    def _set_stream_mode(self, mode: str):
+        """
+        Switch the global stream mode and restart all camera players with the new URL.
+
+        Args:
+            mode: "people_stream" or "origin_url"
+        """
+        global STREAM_MODE
+        if mode == STREAM_MODE:
+            return  # No change needed
+
+        STREAM_MODE = mode
+        mode_label = "Luồng AI (people_stream)" if mode == "people_stream" else "Luồng gốc (origin_url)"
+        print(f"[INFO] Stream mode changed to: {STREAM_MODE}")
+
+        # Update every camera in the persistent pool and restart its player
+        for idx, (frame, lbl, cam) in enumerate(self._cam_frames):
+            # Resolve new URL based on updated STREAM_MODE
+            resolve_cam_url(cam)
+            new_url = cam["url"]
+
+            # Stop and recreate the VLC player with the new URL
+            player = self._cam_players[idx] if idx < len(self._cam_players) else None
+            if player is not None:
+                try:
+                    player.stop()
+                    media = vlc.Media(new_url)
+                    player.set_media(media)
+                    player.play()
+                    print(f"[INFO] Restarted cam '{cam.get('name', idx)}' → {new_url}")
+                except Exception as exc:
+                    print(f"[WARN] Failed to restart cam '{cam.get('name', idx)}': {exc}")
+
+        # Show brief status message in the page label (visible for 3 s)
+        if hasattr(self, 'page_label'):
+            self.page_label.setText(f"🎯 {mode_label}")
+            self.page_label.adjustSize()
+            self.page_label.show()
+            self.page_label.raise_()
+            QtCore.QTimer.singleShot(3000, self._update_page_label)
 
     def _change_view_mode(self, new_mode: int):
         """Switch to a different view mode (1, 4, 9, 16) and rebuild the view."""
@@ -1547,6 +1931,140 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._panel_user_hidden = True
             self._hide_panel()
 
+    def _show_camera_select_dialog(self):
+        """Open dialog to let user choose which cameras to display in this window."""
+        dialog = CameraSelectDialog(
+            all_cameras=self._all_available_cameras,
+            selected_cams=self.all_cams,
+            parent=self,
+        )
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            selected = dialog.get_selected_cameras()
+            if not selected:
+                return  # Don't allow empty selection
+            self._apply_camera_selection(selected)
+
+    def _apply_camera_selection(self, new_cams: list):
+        """Replace current camera list, reusing existing players where possible.
+
+        - Cameras that remain selected keep their player alive (no reconnect).
+        - Cameras that were removed get stopped and cleaned up.
+        - New cameras get fresh players created.
+        """
+        # Stop auto-rotate while rebuilding
+        if hasattr(self, '_auto_rotate_timer') and self._auto_rotate_timer.isActive():
+            self._auto_rotate_timer.stop()
+
+        self._rebuilding = True
+        central = self.centralWidget()
+
+        # Build lookup: url -> (index, frame, label, player, timestamp)
+        old_by_url = {}
+        for i, (f, lbl, cam) in enumerate(self._cam_frames):
+            url = cam["url"]
+            player = self._cam_players[i] if i < len(self._cam_players) else None
+            ts = self._cam_play_ts[i] if i < len(self._cam_play_ts) else 0.0
+            old_by_url[url] = (f, lbl, cam, player, ts)
+
+        new_urls = {c["url"] for c in new_cams}
+
+        # --- 1. Stop and remove cameras no longer selected ---
+        for url, (f, lbl, cam, player, ts) in old_by_url.items():
+            if url not in new_urls:
+                if player:
+                    try:
+                        player.stop()
+                    except Exception:
+                        pass
+                f.hide()
+                f.removeEventFilter(self)
+                f.setParent(None)
+                f.deleteLater()
+                if lbl:
+                    lbl.hide()
+                    lbl.setParent(None)
+                    lbl.deleteLater()
+
+        # --- 2. Build new pool in the order of new_cams ---
+        new_cam_frames = []
+        new_cam_players = []
+        new_cam_play_ts = []
+
+        for cam in new_cams:
+            url = cam["url"]
+            if url in old_by_url:
+                # Reuse existing frame + player (no reconnect needed)
+                f, lbl, _old_cam, player, ts = old_by_url[url]
+                new_cam_frames.append((f, lbl, cam))
+                new_cam_players.append(player)
+                new_cam_play_ts.append(ts)
+            else:
+                # Create new frame + player for newly added camera
+                f = QtWidgets.QFrame(central)
+                f.setStyleSheet("background: transparent; border: 0px;")
+                f.hide()
+                f.installEventFilter(self)
+
+                lbl = QtWidgets.QLabel(central)
+                lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                lbl.setStyleSheet("""
+                    background: transparent;
+                    color: #FFA500;
+                    padding: 4px;
+                    font-size: 14px;
+                    text-shadow: 1px 1px 2px black;
+                """)
+                lbl.setText(cam.get('name', ''))
+                lbl.adjustSize()
+                lbl.hide()
+
+                new_cam_frames.append((f, lbl, cam))
+
+                try:
+                    player = self.vlc_instance.media_player_new()
+                    player.video_set_mouse_input(False)
+                    player.video_set_key_input(False)
+                    media = self.vlc_instance.media_new(cam["url"], VLC_OPTS)
+                    player.set_media(media)
+                    set_player_window_for_platform(player, f)
+                    player.play()
+                    new_cam_players.append(player)
+                except Exception as e:
+                    print(f"[ERROR] init player failed for {cam.get('name')}: {e}")
+                    new_cam_players.append(None)
+                new_cam_play_ts.append(time.time())
+
+        # --- 3. Replace pool state ---
+        self._cam_frames = new_cam_frames
+        self._cam_players = new_cam_players
+        self._cam_play_ts = new_cam_play_ts
+
+        # Filler frames are reusable, keep them
+        self.frames.clear()
+        self.players.clear()
+        self.last_play_attempts.clear()
+        self.tile_map.clear()
+
+        # --- 4. Update camera list ---
+        self.all_cams = new_cams
+        self.current_page = 0
+
+        # Update window title with new camera names
+        cam_names = [c.get("name", "") for c in new_cams]
+        self.group_name = f"Window ({', '.join(cam_names)})"
+        self._update_window_title()
+
+        # --- 5. Rebuild view (just visibility + geometry, no player recreation) ---
+        self._rebuild_view()
+
+        # --- 6. Finish rebuild after short delay ---
+        QtCore.QTimer.singleShot(100, self._finish_rebuild)
+
+        # --- 7. Restart auto-rotate if applicable ---
+        QtCore.QTimer.singleShot(150, self._update_auto_rotate)
+
+        self._rebuilding = False
+
     def closeEvent(self, event):
         # Disconnect socket
         if self.socket_client:
@@ -1578,19 +2096,47 @@ def main():
         sys.exit(1)
 
     total_cams = len(CAM_LIST)
-    cams_per_window = DEFAULT_VIEW_MODE  # 4 cameras per window
-    num_windows = max(1, (total_cams + cams_per_window - 1) // cams_per_window)
-    print(f"[INFO] {total_cams} cameras -> {num_windows} windows ({cams_per_window} cams/window)")
+    print(f"[INFO] Total cameras: {total_cams}")
 
-    # Create multiple windows, each with a chunk of cameras
+    # Hardcoded 6-window layout definition
+    # Note: B11 does not exist — using E11 (Khu vực Lao động, IP 192.168.22.168) for Window 6
+    WINDOW_SPECS = [
+        {"label": "Khu vực buồng giam 01", "cam_names": ["A11", "A12"], "view_mode": 2},
+        {"label": "Khu vực hàng rào",       "cam_names": ["B12"],         "view_mode": 4},
+        {"label": "Khu vực cổng trại",      "cam_names": ["D11", "D12"],  "view_mode": 4},
+        {"label": "Khu vực căn tin",        "cam_names": ["H11"],         "view_mode": 4},
+        {"label": "Khu vực thăm gặp",       "cam_names": ["G14"],         "view_mode": 4},
+        {"label": "Khu vực lao động",       "cam_names": ["E11"],         "view_mode": 4},
+    ]
+
     windows = []
-    for i in range(num_windows):
-        start = i * cams_per_window
-        end = min(start + cams_per_window, total_cams)
-        chunk = CAM_LIST[start:end]
-        cam_names = [c.get("name", "") for c in chunk]
-        group_name = f"Window {i + 1} ({', '.join(cam_names)})"
-        win = CustomLayoutWindow(chunk, vlc_instance, group_name)
+
+    for i, spec in enumerate(WINDOW_SPECS):
+        # Filter CAM_LIST by cam name, preserving spec order
+        name_set = set(spec["cam_names"])
+        name_order = {name: idx for idx, name in enumerate(spec["cam_names"])}
+        cams = sorted(
+            [cam for cam in CAM_LIST if cam.get("name") in name_set],
+            key=lambda c: name_order.get(c.get("name", ""), 999)
+        )
+
+        if not cams:
+            print(f"[WARN] Window {i+1} '{spec['label']}': no cameras found for {spec['cam_names']}, skipping.")
+            continue
+
+        print(f"[INFO] Window {i+1} '{spec['label']}': {[c.get('name') for c in cams]}")
+
+        # Create window with area label and full camera list for selection dialog
+        win = CustomLayoutWindow(cams, vlc_instance, spec["label"],
+                                 all_available_cameras=CAM_LIST)
+        win.view_mode = spec["view_mode"]
+
+        # For view_mode 2 (buồng giam): rebuild layout and schedule panel update
+        if spec["view_mode"] == 2:
+            win._rebuild_view()
+            QtCore.QTimer.singleShot(80, win._layout_and_attach)
+            QtCore.QTimer.singleShot(120, win._update_area_panel)
+
         win.move(50 * i, 50 * i)
         win.show()
         windows.append(win)
