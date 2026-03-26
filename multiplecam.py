@@ -580,10 +580,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self.group_label.setStyleSheet("""
             background: rgba(0, 0, 0, 120);
             color: #FFA500;
-            font-size: 18px;
+            font-size: 28px;
             font-weight: bold;
-            padding: 6px 12px;
-            border-radius: 6px;
+            padding: 10px 18px;
+            border-radius: 8px;
             text-shadow: 1px 1px 2px black;
         """)
         self.group_label.setText(f"{group_name}")
@@ -1172,7 +1172,16 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         return widget
     
     def _create_person_item(self, person):
-        """Create a widget for displaying a recognized person with face image, name, and score."""
+        """Create a widget for displaying a recognized person.
+
+        If the person has not been identified (no subject_name or score == 0),
+        only the captured face image is shown (larger, centred).
+        Otherwise the full layout with face image, profile image, name and score is shown.
+        """
+        subject_name = person.get('subject_name', '')
+        score = person.get('score', 0)
+        is_identified = bool(subject_name) and score > 0
+
         widget = QtWidgets.QWidget()
         widget.setStyleSheet("""
             QWidget {
@@ -1182,17 +1191,70 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 padding: 5px;
             }
         """)
-        
+
+        face_url = person.get('face_url', '')
+
+        if not is_identified:
+            # Unidentified: show only the captured face image, centred and larger
+            layout = QtWidgets.QVBoxLayout(widget)
+            layout.setContentsMargins(8, 8, 8, 8)
+            layout.setSpacing(6)
+            layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+            face_label = QtWidgets.QLabel()
+            face_label.setFixedSize(200, 200)
+            face_label.setStyleSheet("""
+                QLabel {
+                    background-color: #ddd;
+                    border: 2px solid #FFA500;
+                    border-radius: 5px;
+                }
+            """)
+            face_label.setScaledContents(True)
+            face_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+            if face_url:
+                full_url = IMAGE_BASE_URL + face_url if face_url.startswith('/') else urljoin(IMAGE_BASE_URL + '/', face_url)
+                self._load_face_image(full_url, face_label)
+            else:
+                face_label.setText("📷")
+                face_label.setStyleSheet("""
+                    QLabel {
+                        background-color: #ddd;
+                        border: 2px solid #FFA500;
+                        border-radius: 5px;
+                        font-size: 36px;
+                    }
+                """)
+
+            layout.addWidget(face_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+            unknown_label = QtWidgets.QLabel("Chưa xác định")
+            unknown_label.setStyleSheet("""
+                QLabel {
+                    color: #555;
+                    font-size: 15px;
+                    font-weight: bold;
+                    font-style: italic;
+                    background: transparent;
+                }
+            """)
+            unknown_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(unknown_label)
+
+            return widget
+
+        # Identified: full layout — face image | profile image + name
         layout = QtWidgets.QHBoxLayout(widget)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(10)
-        
+
         # Face image + score column
         face_column = QtWidgets.QVBoxLayout()
         face_column.setContentsMargins(0, 0, 0, 0)
         face_column.setSpacing(6)
         face_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        
+
         face_label = QtWidgets.QLabel()
         face_label.setFixedSize(130, 130)
         face_label.setStyleSheet("""
@@ -1204,17 +1266,11 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         face_label.setScaledContents(True)
         face_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        
-        face_url = person.get('face_url', '')
+
         if face_url:
-            # Construct full URL
-            if face_url.startswith('/'):
-                full_url = IMAGE_BASE_URL + face_url
-            else:
-                full_url = urljoin(IMAGE_BASE_URL + '/', face_url)
+            full_url = IMAGE_BASE_URL + face_url if face_url.startswith('/') else urljoin(IMAGE_BASE_URL + '/', face_url)
             self._load_face_image(full_url, face_label)
         else:
-            # Placeholder if no image
             face_label.setText("📷")
             face_label.setStyleSheet("""
                 QLabel {
@@ -1225,9 +1281,8 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
                 }
             """)
         face_column.addWidget(face_label)
-        
-        score = person.get('score', 0)
-        score_percent = int(score * 100) if score > 0 else 0
+
+        score_percent = int(score * 100)
         score_label = QtWidgets.QLabel(f"{score_percent}%")
         score_label.setFixedWidth(face_label.width())
         score_label.setStyleSheet("""
@@ -1244,13 +1299,13 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         score_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         face_column.addWidget(score_label)
         layout.addLayout(face_column)
-        
-        # CSV image (subject profile) + name column
+
+        # Profile image + name column
         profile_column = QtWidgets.QVBoxLayout()
         profile_column.setContentsMargins(0, 0, 0, 0)
         profile_column.setSpacing(6)
         profile_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        
+
         profile_label = QtWidgets.QLabel()
         profile_label.setFixedSize(face_label.size())
         profile_label.setStyleSheet("""
@@ -1262,16 +1317,15 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         profile_label.setScaledContents(True)
         profile_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        
-        csv_url = get_subject_image_url(person.get('subject_name'))
+
+        csv_url = get_subject_image_url(subject_name)
         if csv_url:
             self._load_face_image(csv_url, profile_label)
         else:
             profile_label.setText("🖼️")
         profile_column.addWidget(profile_label)
-        
-        name = person.get('subject_name', 'Unknown')
-        name_label = QtWidgets.QLabel(name)
+
+        name_label = QtWidgets.QLabel(subject_name)
         name_label.setFixedWidth(face_label.width())
         name_label.setWordWrap(False)
         name_label.setStyleSheet("""
@@ -1284,14 +1338,14 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """)
         name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         metrics = name_label.fontMetrics()
-        elided = metrics.elidedText(name, QtCore.Qt.TextElideMode.ElideRight, face_label.width() - 6)
+        elided = metrics.elidedText(subject_name, QtCore.Qt.TextElideMode.ElideRight, face_label.width() - 6)
         name_label.setText(elided)
-        if elided != name:
-            name_label.setToolTip(name)
+        if elided != subject_name:
+            name_label.setToolTip(subject_name)
         profile_column.addWidget(name_label)
-        
+
         layout.addLayout(profile_column)
-        
+
         return widget
 
     def _build_panel_snapshot(self, counts):
