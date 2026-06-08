@@ -63,6 +63,9 @@ AUTO_ROTATE_INTERVAL = 30000  # Auto-rotate interval in ms (30 seconds) for sing
 # "origin_url"    = always use direct camera RTSP
 STREAM_MODE = "people_stream"
 
+# Global registry of all open windows (used for broadcasting stream mode changes)
+ALL_WINDOWS = []
+
 
 def normalize_area_name(area_name: str) -> str:
     """Return normalized area name for comparisons."""
@@ -663,6 +666,9 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             QtCore.QTimer.singleShot(100, self._update_area_panel)
         else:
             self.panel_visible = False
+
+        # Register this window in the global list
+        ALL_WINDOWS.append(self)
 
         # Show fullscreen and layout
         QtCore.QTimer.singleShot(50, self.showFullScreen)
@@ -1873,7 +1879,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
 
     def _set_stream_mode(self, mode: str):
         """
-        Switch the global stream mode and restart all camera players with the new URL.
+        Switch the global stream mode and restart all camera players in ALL windows.
 
         Args:
             mode: "people_stream" or "origin_url"
@@ -1886,31 +1892,54 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         mode_label = "Luồng AI (people_stream)" if mode == "people_stream" else "Luồng gốc (origin_url)"
         print(f"[INFO] Stream mode changed to: {STREAM_MODE}")
 
-        # Update every camera in the persistent pool and restart its player
-        for idx, (frame, lbl, cam) in enumerate(self._cam_frames):
-            # Resolve new URL based on updated STREAM_MODE
-            resolve_cam_url(cam)
-            new_url = cam["url"]
+        # Resolve new URLs for all cameras in all windows
+        for win in ALL_WINDOWS:
+            for idx, (frame, lbl, cam) in enumerate(win._cam_frames):
+                resolve_cam_url(cam)
 
-            # Stop and recreate the VLC player with the new URL
-            player = self._cam_players[idx] if idx < len(self._cam_players) else None
-            if player is not None:
-                try:
-                    player.stop()
-                    media = vlc.Media(new_url)
-                    player.set_media(media)
-                    player.play()
-                    print(f"[INFO] Restarted cam '{cam.get('name', idx)}' → {new_url}")
-                except Exception as exc:
-                    print(f"[WARN] Failed to restart cam '{cam.get('name', idx)}': {exc}")
+        # Stagger restarts: stop + set new media per camera with delay
+        delay = 200
+        for win in ALL_WINDOWS:
+            for idx in range(len(win._cam_frames)):
+                QtCore.QTimer.singleShot(delay, lambda w=win, i=idx: w._switch_cam_media(i))
+                delay += 600
 
-        # Show brief status message in the page label (visible for 3 s)
-        if hasattr(self, 'page_label'):
-            self.page_label.setText(f"🎯 {mode_label}")
-            self.page_label.adjustSize()
-            self.page_label.show()
-            self.page_label.raise_()
-            QtCore.QTimer.singleShot(3000, self._update_page_label)
+            # Show status on each window
+            if hasattr(win, 'page_label'):
+                win.page_label.setText(f"🎯 {mode_label}")
+                win.page_label.adjustSize()
+                win.page_label.show()
+                win.page_label.raise_()
+                QtCore.QTimer.singleShot(5000, win._update_page_label)
+
+    def _switch_cam_media(self, idx: int):
+        """Switch media on existing player without releasing it."""
+        if idx >= len(self._cam_frames):
+            return
+        frame, lbl, cam = self._cam_frames[idx]
+        new_url = cam["url"]
+
+        player = self._cam_players[idx]
+        if player is None:
+            return
+
+        try:
+            player.stop()
+            media = self.vlc_instance.media_new(new_url, VLC_OPTS)
+            player.set_media(media)
+            set_player_window_for_platform(player, frame)
+            player.play()
+            self._cam_play_ts[idx] = time.time()
+
+            # Update active view reference if this cam is on the current page
+            for view_idx, (vf, _vl, vcam) in enumerate(self.frames):
+                if vcam is not None and id(vcam) == id(cam):
+                    self.last_play_attempts[view_idx] = time.time()
+                    break
+
+            print(f"[INFO] Switched cam '{cam.get('name', idx)}' → {new_url}")
+        except Exception as exc:
+            print(f"[WARN] Failed to switch cam '{cam.get('name', idx)}': {exc}")
 
     def _change_view_mode(self, new_mode: int):
         """Switch to a different view mode (1, 4, 9, 16) and rebuild the view."""
@@ -2120,13 +2149,17 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         self._rebuilding = False
 
     def closeEvent(self, event):
+        # Unregister from global window list
+        if self in ALL_WINDOWS:
+            ALL_WINDOWS.remove(self)
+
         # Disconnect socket
         if self.socket_client:
             try:
                 self.socket_client.disconnect()
             except Exception:
                 pass
-        
+
         # Stop ALL persistent pool players (not just the active page)
         for p in self._cam_players:
             try:
