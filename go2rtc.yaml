@@ -46,14 +46,6 @@ streams:
   - rtsp://admin:Benta123%25@192.168.22.161:554/profile2/media.smp
   c90776dbac058ed6957f476e_origin:
   - rtsp://admin:Taikhoan1@192.168.22.170:554
-  - rtsp://192.168.22.3:8564/bbox/83567cd28bc5c1e1749a19fa
-  - rtsp://192.168.22.3:8564/bbox/c064aa5670a62419ecc714e0
-  - rtsp://192.168.22.3:8564/bbox/f1c9d16d7f35450ac3171d20
-  - rtsp://192.168.22.3:8564/bbox/5a90dccf0259cc883dd91c7a
-  - rtsp://192.168.22.3:8564/bbox/c0e3be4e63002c75ba05748a
-  - rtsp://192.168.22.3:8564/bbox/75b573a2a80f7d1f54f711b8
-  - rtsp://192.168.22.3:8564/bbox/0cca06a7ff96faf82be08131
-  - rtsp://192.168.22.3:8564/bbox/c90776dbac058ed6957f476e
   8acfe827853aff5217d7ef21_origin:
   - rtsp://admin:UNV123456%25@192.168.22.157:554/ch01
   7975566a25bafcc34f6109d3_origin:
@@ -126,7 +118,3 @@ streams:
   - rtsp://192.168.22.3:8564/bbox/ed90f7f5841740336de541fe
   bc666a1cd3460379f3d05a2a_people:
   - rtsp://192.168.22.3:8564/bbox/bc666a1cd3460379f3d05a2a
-  9ac31f8f5bc8fc857418e778_origin:
-    - rtsp://admin:QXKXOD@192.168.22.127:554/stream1
-  9ac31f8f5bc8fc857418e778_people:
-    - rtsp://192.168.22.3:8564/bbox/9ac31f8f5bc8fc857418e778

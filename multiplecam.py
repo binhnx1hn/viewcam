@@ -54,7 +54,7 @@ VLC_OPTS = (
 )
 PANEL_WIDTH = 350  # Width of the right-side panel for area counts
 MAX_CAMS_PER_WINDOW = 16  # Maximum cameras per window
-VIEW_MODES = [1, 2, 4, 9, 16]  # Available view modes: 1x1, 1x2, 2x2, 3x3, 4x4
+VIEW_MODES = [1, 2, 4, 9, 16, 25, 36]  # Available view modes: 1x1, 1x2, 2x2, 3x3, 4x4, 5x5, 6x6
 DEFAULT_VIEW_MODE = 4  # Default view mode (2x2 grid)
 AUTO_ROTATE_INTERVAL = 30000  # Auto-rotate interval in ms (30 seconds) for single-cam view
 
@@ -680,7 +680,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         """Update window title with current view mode and page info."""
         total = len(self.all_cams)
         total_pages = max(1, (total + self.view_mode - 1) // self.view_mode)
-        grid = {1: '1x1', 4: '2x2', 9: '3x3', 16: '4x4'}.get(self.view_mode, f'{self.view_mode}')
+        grid = {1: '1x1', 4: '2x2', 9: '3x3', 16: '4x4', 25: '5x5', 36: '6x6'}.get(self.view_mode, f'{self.view_mode}')
         self.setWindowTitle(
             f"{self.group_name} — {grid} — Trang {self.current_page + 1}/{total_pages} ({total} cams)"
         )
@@ -1737,6 +1737,10 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
             self._change_view_mode(9)
         elif event.key() == QtCore.Qt.Key.Key_5:
             self._change_view_mode(16)
+        elif event.key() == QtCore.Qt.Key.Key_6:
+            self._change_view_mode(25)
+        elif event.key() == QtCore.Qt.Key.Key_7:
+            self._change_view_mode(36)
         else:
             super().keyPressEvent(event)
 
@@ -1774,7 +1778,7 @@ class CustomLayoutWindow(QtWidgets.QMainWindow):
         # ---------- View mode submenu ----------
         view_menu = menu.addMenu("🖥️ Chế độ xem")
         view_menu.setStyleSheet(menu_style)
-        mode_labels = {1: "1 cam (1×1)", 2: "2 cam (1×2)", 4: "4 cam (2×2)", 9: "9 cam (3×3)", 16: "16 cam (4×4)"}
+        mode_labels = {1: "1 cam (1×1)", 2: "2 cam (1×2)", 4: "4 cam (2×2)", 9: "9 cam (3×3)", 16: "16 cam (4×4)", 25: "25 cam (5×5)", 36: "36 cam (6×6)"}
         for mode in VIEW_MODES:
             label = mode_labels.get(mode, f"{mode} cam")
             if mode == self.view_mode:
